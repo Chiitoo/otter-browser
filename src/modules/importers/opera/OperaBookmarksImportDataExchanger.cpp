@@ -171,7 +171,6 @@ void OperaBookmarksImportJob::start()
 	m_isRunning = true;
 
 	QTextStream stream(&file);
-	stream.setCodec("UTF-8");
 
 	QString line(stream.readLine());
 

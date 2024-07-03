@@ -786,7 +786,6 @@ AdblockContentFiltersProfile::HeaderInformation AdblockContentFiltersProfile::lo
 {
 	HeaderInformation information;
 	QTextStream stream(rulesDevice);
-	stream.setCodec("UTF-8");
 
 	const QString header(stream.readLine());
 
@@ -826,7 +825,6 @@ QHash<AdblockContentFiltersProfile::RuleType, quint32> AdblockContentFiltersProf
 {
 	QHash<RuleType, quint32> information({{AnyRule, 0}, {ActiveRule, 0}, {CosmeticRule, 0}, {WildcardRule, 0}});
 	QTextStream stream(rulesDevice);
-	stream.setCodec("UTF-8");
 	stream.readLine();
 
 	while (!stream.atEnd())
@@ -1051,7 +1049,6 @@ bool AdblockContentFiltersProfile::loadRules()
 	file.open(QIODevice::ReadOnly | QIODevice::Text);
 
 	QTextStream stream(&file);
-	stream.setCodec("UTF-8");
 	stream.readLine(); // skip header
 
 	m_root = new Node();

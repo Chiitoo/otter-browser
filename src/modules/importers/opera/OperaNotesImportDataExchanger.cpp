@@ -140,7 +140,6 @@ bool OperaNotesImportDataExchanger::importData(const QString &path)
 	}
 
 	QTextStream stream(&file);
-	stream.setCodec("UTF-8");
 
 	QString line(stream.readLine());
 
