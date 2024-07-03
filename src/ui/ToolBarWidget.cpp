@@ -1074,7 +1074,7 @@ TabBarToolBarWidget::TabBarToolBarWidget(int identifier, Window *window, QWidget
 {
 	setContentsMargins(0, 0, 0, 0);
 
-	layout()->setMargin(0);
+	layout()->setContentsMargins(0, 0, 0, 0);
 
 	setDefinition(getDefinition());
 
@@ -1378,7 +1378,7 @@ bool TabBarToolBarWidget::event(QEvent *event)
 
 		setContentsMargins(0, 0, 0, 0);
 
-		layout()->setMargin(0);
+		layout()->setContentsMargins(0, 0, 0, 0);
 
 		return result;
 	}
