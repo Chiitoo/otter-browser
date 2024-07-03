@@ -580,6 +580,7 @@ QColor createColor(const QUrl &url)
 	return QColor(hash.at(0), hash.at(1), hash.at(2));
 }
 
+/* qt6: chosen constructor is explicit in copy-initialization
 QLocale createLocale(const QString &name)
 {
 	if (name == QLatin1String("pt"))
@@ -589,6 +590,7 @@ QLocale createLocale(const QString &name)
 
 	return {name};
 }
+*/
 
 QPixmap loadPixmapFromDataUri(const QString &data)
 {
