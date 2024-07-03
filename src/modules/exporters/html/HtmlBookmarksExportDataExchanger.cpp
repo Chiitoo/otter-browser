@@ -38,16 +38,16 @@ void HtmlBookmarksExportDataExchanger::writeBookmark(QTextStream *stream, Bookma
 	{
 		case BookmarksModel::FeedBookmark:
 		case BookmarksModel::UrlBookmark:
-			*stream << "<DT><A HREF=\"" << bookmark->getUrl().toString().toHtmlEscaped() << "\" ADD_DATE=\"" << bookmark->getTimeAdded().toTime_t() << "\"";
+			*stream << "<DT><A HREF=\"" << bookmark->getUrl().toString().toHtmlEscaped() << "\" ADD_DATE=\"" << bookmark->getTimeAdded().toSecsSinceEpoch() << "\"";
 
 			if (bookmark->getTimeModified().isValid())
 			{
-				*stream << " LAST_MODIFIED=\"" << bookmark->getTimeModified().toTime_t() << "\"";
+				*stream << " LAST_MODIFIED=\"" << bookmark->getTimeModified().toSecsSinceEpoch() << "\"";
 			}
 
 			if (bookmark->getTimeVisited().isValid())
 			{
-				*stream << " LAST_VISITED=\"" << bookmark->getTimeVisited().toTime_t() << "\"";
+				*stream << " LAST_VISITED=\"" << bookmark->getTimeVisited().toSecsSinceEpoch() << "\"";
 			}
 
 			if (type == BookmarksModel::FeedBookmark)
