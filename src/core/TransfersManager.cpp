@@ -1211,7 +1211,9 @@ Transfer* TransfersManager::startTransfer(const QUrl &source, const QString &tar
 {
 	QNetworkRequest request;
 	request.setAttribute(QNetworkRequest::CacheLoadControlAttribute, QNetworkRequest::AlwaysNetwork);
+	/* qt6: 'FollowRedirectsAttribute' has been removed
 	request.setAttribute(QNetworkRequest::FollowRedirectsAttribute, true);
+	*/
 	request.setHeader(QNetworkRequest::UserAgentHeader, NetworkManagerFactory::getUserAgent());
 	request.setUrl(QUrl(source));
 
