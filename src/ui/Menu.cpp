@@ -40,7 +40,6 @@
 #include <QtCore/QMetaEnum>
 #include <QtCore/QMimeDatabase>
 #include <QtGui/QMouseEvent>
-#include <QtWidgets/QDesktopWidget>
 
 namespace Otter
 {
