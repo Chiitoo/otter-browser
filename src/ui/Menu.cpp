@@ -39,6 +39,7 @@
 #include <QtCore/QJsonDocument>
 #include <QtCore/QMetaEnum>
 #include <QtCore/QMimeDatabase>
+#include <QtGui/QActionGroup>
 #include <QtGui/QMouseEvent>
 
 namespace Otter
