@@ -1283,7 +1283,9 @@ void TabBarWidget::showPreview(int index, int delay)
 		// of a current screen rectangle. Because top left point of current screen could
 		// have coordinates (-1366, 250) instead of (0, 0).
 		///TODO: Calculate screen rectangle based on current mouse pointer position
-		const QRect screen(QApplication::desktop()->screenGeometry(this));
+		/* qt6: no matching function for call to ‘QScreen::geometry()
+		const QRect screen(QGuiApplication::primaryScreen()->geometry(this));
+		*/
 		QRect rectangle(tabRect(index));
 		rectangle.moveTo(mapToGlobal(rectangle.topLeft()));
 
