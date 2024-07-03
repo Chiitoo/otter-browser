@@ -39,7 +39,6 @@
 #include <QtCore/QJsonDocument>
 #include <QtCore/QMetaEnum>
 #include <QtCore/QMimeDatabase>
-#include <QtCore/QTextCodec>
 #include <QtGui/QMouseEvent>
 #include <QtWidgets/QDesktopWidget>
 
@@ -919,6 +918,7 @@ void Menu::populateCharacterEncodingMenu()
 		addAction(defaultAction);
 		addSeparator();
 
+		/* qt6: QTextCodec is no more
 		for (int i = 0; i < textCodecs.count(); ++i)
 		{
 			const QTextCodec *codec(QTextCodec::codecForMib(textCodecs.at(i)));
@@ -934,6 +934,7 @@ void Menu::populateCharacterEncodingMenu()
 
 			m_actionGroup->addAction(textCodecAction);
 		}
+		*/
 	}
 
 	if (isEmpty())
@@ -1812,12 +1813,14 @@ void MenuAction::setState(const ActionsManager::ActionDefinition::State &state)
 	if (!shortcut().isEmpty())
 	{
 		const int shortcutWidth(m_menu->fontMetrics().boundingRect(QLatin1Char('X') + shortcut().toString(QKeySequence::NativeText)).width());
+		/* qt6: desktop() is no more; replace with QScreen?
 		const int availableWidth(QApplication::desktop()->screenGeometry(m_menu).width() / 4);
 
 		if (shortcutWidth < availableWidth)
 		{
 			maximumWidth = (availableWidth - shortcutWidth);
 		}
+		*/
 	}
 
 	setText(Utils::elideText(QString(state.text).replace(QLatin1Char('&'), QLatin1String("&&")), m_menu->fontMetrics(), m_menu, maximumWidth));
