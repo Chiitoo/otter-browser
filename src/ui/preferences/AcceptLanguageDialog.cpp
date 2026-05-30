@@ -1,7 +1,7 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
 * Copyright (C) 2014 Piotr Wójcik <chocimier@tlen.pl>
-* Copyright (C) 2015 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -42,9 +42,9 @@ AcceptLanguageDialog::AcceptLanguageDialog(const QString &languages, QWidget *pa
 
 	const QStringList chosenLanguages(languages.split(QLatin1Char(','), Qt::SkipEmptyParts));
 
-	for (int i = 0; i < chosenLanguages.count(); ++i)
+	for (const QString &chosenLanguage: chosenLanguages)
 	{
-		addLanguage(chosenLanguages.at(i).section(QLatin1Char(';'), 0, 0));
+		addLanguage(chosenLanguage.section(QLatin1Char(';'), 0, 0));
 	}
 
 	updateLanguages();
@@ -146,13 +146,11 @@ void AcceptLanguageDialog::addLanguage(const QString &language)
 void AcceptLanguageDialog::updateLanguages()
 {
 	const QList<QLocale> locales(QLocale::matchingLocales(QLocale::AnyLanguage, QLocale::AnyScript, QLocale::AnyCountry));
-	QVector<QPair<QString, QString> > entries;
+	QVector<Locale> entries;
 	entries.reserve(locales.count() + 2);
 
-	for (int i = 0; i < locales.count(); ++i)
+	for (const QLocale &locale: locales)
 	{
-		const QLocale &locale(locales.at(i));
-
 		if (locale != QLocale::c())
 		{
 			if (locale.nativeCountryName().isEmpty() || locale.nativeLanguageName().isEmpty())
@@ -169,9 +167,9 @@ void AcceptLanguageDialog::updateLanguages()
 	QCollator collator;
 	collator.setCaseSensitivity(Qt::CaseInsensitive);
 
-	std::sort(entries.begin(), entries.end(), [&](const QPair<QString, QString> &first, const QPair<QString, QString> &second)
+	std::sort(entries.begin(), entries.end(), [&](const Locale &first, const Locale &second)
 	{
-		return (collator.compare(first.first, second.first) < 0);
+		return (collator.compare(first.title, second.title) < 0);
 	});
 
 	entries.prepend({tr("Any other"), QLatin1String("*")});
@@ -182,9 +180,9 @@ void AcceptLanguageDialog::updateLanguages()
 
 	m_ui->languagesComboBox->clear();
 
-	for (int i = 0; i < entries.count(); ++i)
+	for (const Locale &entry: entries)
 	{
-		m_ui->languagesComboBox->addItem(entries.at(i).first, entries.at(i).second);
+		m_ui->languagesComboBox->addItem(entry.title, entry.name);
 	}
 
 	m_ui->languagesComboBox->setCurrentIndex(index);
@@ -216,7 +214,7 @@ QString AcceptLanguageDialog::getLanguages()
 			}
 			else
 			{
-				result.append(QStringLiteral(",%1;q=%2").arg(index.data(Qt::UserRole).toString()).arg(qMax(1 - (i * step), 0.001)));
+				result.append(QStringLiteral(",%1;q=%2").arg(index.data(Qt::UserRole).toString(), QString::number(qMax(1 - (i * step), 0.001))));
 			}
 		}
 	}

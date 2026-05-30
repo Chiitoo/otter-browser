@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 Piotr Wójcik <chocimier@tlen.pl>
 * Copyright (C) 2015 - 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
@@ -75,7 +75,6 @@ protected:
 protected slots:
 	void handleDownloadProgress(qint64 bytesReceived, qint64 bytesTotal);
 	void handleRequestFinished(QNetworkReply *reply);
-	void handleTransferFinished();
 	void handleAuthenticationRequired(QNetworkReply *reply, QAuthenticator *authenticator);
 	void handleProxyAuthenticationRequired(const QNetworkProxy &proxy, QAuthenticator *authenticator);
 	void handleSslErrors(QNetworkReply *reply, const QList<QSslError> &errors);

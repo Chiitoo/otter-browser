@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2015 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -88,10 +88,8 @@ void ToolBarsManager::timerEvent(QTimerEvent *event)
 		QJsonArray definitionsArray;
 		const QMap<ToolBarVisibility, QString> visibilityModes({{AlwaysVisibleToolBar, QLatin1String("visible")}, {OnHoverVisibleToolBar, QLatin1String("hover")}, {AutoVisibilityToolBar, QLatin1String("auto")}, {AlwaysHiddenToolBar, QLatin1String("hidden")}});
 
-		for (int i = 0; i < m_definitions.count(); ++i)
+		for (const ToolBarDefinition &definition: std::as_const(m_definitions))
 		{
-			const ToolBarDefinition definition(m_definitions.at(i));
-
 			if (definition.isDefault || definition.wasRemoved)
 			{
 				continue;
@@ -202,9 +200,9 @@ void ToolBarsManager::timerEvent(QTimerEvent *event)
 			{
 				QJsonArray actionsArray;
 
-				for (int j = 0; j < definition.entries.count(); ++j)
+				for (const ToolBarDefinition::Entry &entry: definition.entries)
 				{
-					actionsArray.append(encodeEntry(definition.entries.at(j)));
+					actionsArray.append(encodeEntry(entry));
 				}
 
 				definitionObject.insert(QLatin1String("actions"), actionsArray);
@@ -283,9 +281,9 @@ void ToolBarsManager::ensureInitialized()
 	const QVector<ToolBarDefinition::Entry> menuBarEntries(m_definitions[MenuBar].entries);
 	bool hasMenuBar(false);
 
-	for (int i = 0; i < menuBarEntries.count(); ++i)
+	for (const ToolBarDefinition::Entry &entry: menuBarEntries)
 	{
-		if (menuBarEntries.at(i).action == QLatin1String("MenuBarWidget"))
+		if (entry.action == QLatin1String("MenuBarWidget"))
 		{
 			hasMenuBar = true;
 
@@ -304,9 +302,9 @@ void ToolBarsManager::ensureInitialized()
 	const QVector<ToolBarDefinition::Entry> tabBarEntries(m_definitions[TabBar].entries);
 	bool hasTabBar(false);
 
-	for (int i = 0; i < tabBarEntries.count(); ++i)
+	for (const ToolBarDefinition::Entry &entry: tabBarEntries)
 	{
-		if (tabBarEntries.at(i).action == QLatin1String("TabBarWidget"))
+		if (entry.action == QLatin1String("TabBarWidget"))
 		{
 			hasTabBar = true;
 
@@ -368,7 +366,7 @@ void ToolBarsManager::configureToolBar(int identifier)
 
 void ToolBarsManager::resetToolBar(int identifier)
 {
-	if (identifier >= 0 && identifier < OtherToolBar && QMessageBox::question(nullptr, tr("Reset Toolbar"), tr("Do you really want to reset this toolbar to default configuration?"), QMessageBox::Yes, QMessageBox::No) == QMessageBox::Yes)
+	if (identifier >= 0 && identifier < OtherToolBar && QMessageBox::question(nullptr, tr("Reset Toolbar"), tr("Do you really want to reset this toolbar to default configuration?"), (QMessageBox::Yes | QMessageBox::No), QMessageBox::No) == QMessageBox::Yes)
 	{
 		setToolBar(loadToolBars(SessionsManager::getReadableDataPath(QLatin1String("toolBars.json"), true), true).value(getToolBarName(identifier)));
 	}
@@ -376,7 +374,7 @@ void ToolBarsManager::resetToolBar(int identifier)
 
 void ToolBarsManager::removeToolBar(int identifier)
 {
-	if (identifier >= 0 && identifier < m_definitions.count() && identifier >= OtherToolBar && QMessageBox::question(nullptr, tr("Remove Toolbar"), tr("Do you really want to remove this toolbar?"), QMessageBox::Yes, QMessageBox::No) == QMessageBox::Yes)
+	if (identifier >= 0 && identifier < m_definitions.count() && identifier >= OtherToolBar && QMessageBox::question(nullptr, tr("Remove Toolbar"), tr("Do you really want to remove this toolbar?"), (QMessageBox::Yes | QMessageBox::No), QMessageBox::No) == QMessageBox::Yes)
 	{
 		m_definitions[identifier].markAsRemoved();
 
@@ -388,7 +386,7 @@ void ToolBarsManager::removeToolBar(int identifier)
 
 void ToolBarsManager::resetToolBars()
 {
-	if (QMessageBox::question(nullptr, tr("Reset Toolbars"), tr("Do you really want to reset all toolbars to default configuration?"), QMessageBox::Yes, QMessageBox::No) == QMessageBox::No)
+	if (QMessageBox::question(nullptr, tr("Reset Toolbars"), tr("Do you really want to reset all toolbars to default configuration?"), (QMessageBox::Yes | QMessageBox::No), QMessageBox::No) == QMessageBox::No)
 	{
 		return;
 	}
@@ -397,9 +395,9 @@ void ToolBarsManager::resetToolBars()
 
 	const QList<int> customToolBars(m_identifiers.keys());
 
-	for (int i = 0; i < customToolBars.count(); ++i)
+	for (int identifier: customToolBars)
 	{
-		emit m_instance->toolBarRemoved(customToolBars.at(i));
+		emit m_instance->toolBarRemoved(identifier);
 	}
 
 	const QHash<QString, ToolBarDefinition> definitions(loadToolBars(SessionsManager::getReadableDataPath(QLatin1String("toolBars.json"), true), true));
@@ -503,7 +501,7 @@ QJsonValue ToolBarsManager::encodeEntry(const ToolBarDefinition::Entry &definiti
 {
 	if (definition.entries.isEmpty() && definition.options.isEmpty() && definition.parameters.isEmpty())
 	{
-		return QJsonValue(definition.action);
+		return {definition.action};
 	}
 
 	QJsonObject actionObject({{QLatin1String("identifier"), QJsonValue(definition.action)}});
@@ -512,9 +510,9 @@ QJsonValue ToolBarsManager::encodeEntry(const ToolBarDefinition::Entry &definiti
 	{
 		QJsonArray actionsArray;
 
-		for (int i = 0; i < definition.entries.count(); ++i)
+		for (const ToolBarDefinition::Entry &entry: definition.entries)
 		{
-			actionsArray.append(encodeEntry(definition.entries.at(i)));
+			actionsArray.append(encodeEntry(entry));
 		}
 
 		actionObject.insert(QLatin1String("actions"), actionsArray);
@@ -530,7 +528,7 @@ QJsonValue ToolBarsManager::encodeEntry(const ToolBarDefinition::Entry &definiti
 		actionObject.insert(QLatin1String("parameters"), QJsonValue::fromVariant(definition.parameters));
 	}
 
-	return QJsonValue(actionObject);
+	return {actionObject};
 }
 
 ToolBarsManager::ToolBarDefinition::Entry ToolBarsManager::decodeEntry(const QJsonValue &value)
@@ -556,9 +554,9 @@ ToolBarsManager::ToolBarDefinition::Entry ToolBarsManager::decodeEntry(const QJs
 
 		definition.entries.reserve(actionsArray.count());
 
-		for (int i = 0; i < actionsArray.count(); ++i)
+		for (const QJsonValue &actionValue: actionsArray)
 		{
-			definition.entries.append(decodeEntry(actionsArray.at(i)));
+			definition.entries.append(decodeEntry(actionValue));
 		}
 	}
 
@@ -663,9 +661,9 @@ QHash<QString, ToolBarsManager::ToolBarDefinition> ToolBarsManager::loadToolBars
 
 		definition.entries.reserve(actionsArray.count());
 
-		for (int j = 0; j < actionsArray.count(); ++j)
+		for (const QJsonValue &actionValue: actionsArray)
 		{
-			definition.entries.append(decodeEntry(actionsArray.at(j)));
+			definition.entries.append(decodeEntry(actionValue));
 		}
 
 		definitions[identifier] = definition;
@@ -681,11 +679,11 @@ QVector<ToolBarsManager::ToolBarDefinition> ToolBarsManager::getToolBarDefinitio
 	QVector<ToolBarsManager::ToolBarDefinition> definitions;
 	definitions.reserve(m_definitions.count());
 
-	for (int i = 0; i < m_definitions.count(); ++i)
+	for (const ToolBarDefinition &definition: std::as_const(m_definitions))
 	{
-		if (!m_definitions.at(i).wasRemoved && (areas == Qt::AllToolBarAreas || areas.testFlag(m_definitions.at(i).location)))
+		if (!definition.wasRemoved && (areas == Qt::AllToolBarAreas || areas.testFlag(definition.location)))
 		{
-			definitions.append(m_definitions.at(i));
+			definitions.append(definition);
 		}
 	}
 

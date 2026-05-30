@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -48,7 +48,9 @@ StartupDialog::StartupDialog(const QString &sessionName, QWidget *parent) : Dial
 
 	for (int i = 0; i < sessions.count(); ++i)
 	{
-		m_ui->sessionComboBox->addItem((sessions.at(i).title.isEmpty() ? tr("(Untitled)") : sessions.at(i).title), sessions.at(i).path);
+		const SessionInformation session(sessions.at(i));
+
+		m_ui->sessionComboBox->addItem((session.title.isEmpty() ? tr("(Untitled)") : session.title), session.path);
 	}
 
 	const int index(qMax(0, m_ui->sessionComboBox->findData(sessionName)));
@@ -57,7 +59,7 @@ StartupDialog::StartupDialog(const QString &sessionName, QWidget *parent) : Dial
 
 	setSession(index);
 
-	connect(m_ui->buttonGroup, static_cast<void(QButtonGroup::*)(QAbstractButton*)>(&QButtonGroup::buttonClicked), [&]()
+	connect(m_ui->buttonGroup, static_cast<void(QButtonGroup::*)(QAbstractButton*)>(&QButtonGroup::buttonClicked), this, [&]()
 	{
 		m_ui->continueSessionWidget->setEnabled(m_ui->continueSessionButton->isChecked());
 	});
@@ -90,21 +92,23 @@ void StartupDialog::setSession(int index)
 
 	for (int i = 0; i < session.windows.count(); ++i)
 	{
+		const Session::MainWindow mainWindow(session.windows.at(i));
 		QStandardItem *windowItem(new QStandardItem(tr("Window %1").arg(i + 1)));
-		windowItem->setData(session.windows.at(i).geometry, Qt::UserRole);
+		windowItem->setData(mainWindow.geometry, Qt::UserRole);
 
 		m_windowsModel->invisibleRootItem()->appendRow(windowItem);
 
-		for (int j = 0; j < session.windows.at(i).windows.count(); ++j)
+		for (int j = 0; j < mainWindow.windows.count(); ++j)
 		{
-			QStandardItem *tabItem(new QStandardItem(session.windows.at(i).windows.at(j).getTitle()));
+			const Session::Window window(mainWindow.windows.at(j));
+			QStandardItem *tabItem(new QStandardItem(window.getTitle()));
 			tabItem->setFlags(windowItem->flags() | Qt::ItemIsUserCheckable | Qt::ItemNeverHasChildren);
 			tabItem->setData(Qt::Checked, Qt::CheckStateRole);
-			tabItem->setData(tr("Title: %1\nAddress: %2").arg(tabItem->text(), session.windows.at(i).windows.at(j).getUrl()), Qt::ToolTipRole);
+			tabItem->setData(tr("Title: %1\nAddress: %2").arg(tabItem->text(), window.getUrl()), Qt::ToolTipRole);
 
 			windowItem->appendRow(tabItem);
 
-			if (j == session.windows.at(i).index)
+			if (j == mainWindow.index)
 			{
 				tabItem->setData(font, Qt::FontRole);
 

@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2015 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -44,26 +44,30 @@ void MarginWidget::paintEvent(QPaintEvent *event)
 	QPainter painter(this);
 	painter.fillRect(event->rect(), Qt::transparent);
 
+	QColor textColor(palette().color(QPalette::Text));
 	QTextBlock block(m_sourceEditWidget->firstVisibleBlock());
+	const QTextCursor textCursor(m_sourceEditWidget->textCursor());
 	const Qt::AlignmentFlag alignment(isLeftToRight() ? Qt::AlignRight : Qt::AlignLeft);
 	int top(m_sourceEditWidget->blockBoundingGeometry(block).translated(m_sourceEditWidget->contentOffset()).toRect().top());
-	int bottom(top + m_sourceEditWidget->blockBoundingRect(block).toRect().height());
 	const int numberHeight(fontMetrics().height());
 	const int numberWidth(width() - 8);
-	const int selectionStart(m_sourceEditWidget->document()->findBlock(m_sourceEditWidget->textCursor().selectionStart()).blockNumber());
-	const int selectionEnd(m_sourceEditWidget->document()->findBlock(m_sourceEditWidget->textCursor().selectionEnd()).blockNumber());
+	const int selectionStart(m_sourceEditWidget->document()->findBlock(textCursor.selectionStart()).blockNumber());
+	const int selectionEnd(m_sourceEditWidget->document()->findBlock(textCursor.selectionEnd()).blockNumber());
 	const int initialRevison(m_sourceEditWidget->getInitialRevision());
 	const int savedRevison(m_sourceEditWidget->getSavedRevision());
 
 	while (block.isValid() && top <= event->rect().bottom())
 	{
+		const int bottom(top + m_sourceEditWidget->blockBoundingRect(block).toRect().height());
+
 		if (block.isVisible() && bottom >= event->rect().top())
 		{
-			QColor textColor(palette().color(QPalette::Text));
-			textColor.setAlpha((block.blockNumber() >= selectionStart && block.blockNumber() <= selectionEnd) ? 250 : 150);
+			const int blockNumber(block.blockNumber());
+
+			textColor.setAlpha((blockNumber >= selectionStart && blockNumber <= selectionEnd) ? 250 : 150);
 
 			painter.setPen(textColor);
-			painter.drawText(4, top, numberWidth, numberHeight, alignment, QString::number(block.blockNumber() + 1));
+			painter.drawText(4, top, numberWidth, numberHeight, alignment, QString::number(blockNumber + 1));
 
 			if (block.revision() > initialRevison)
 			{
@@ -75,14 +79,13 @@ void MarginWidget::paintEvent(QPaintEvent *event)
 
 		block = block.next();
 		top = bottom;
-		bottom = (top + m_sourceEditWidget->blockBoundingRect(block).toRect().height());
 	}
 }
 
 void MarginWidget::contextMenuEvent(QContextMenuEvent *event)
 {
 	Menu menu(this);
-	QAction *showLineNumbersAction(menu.addAction(tr("Show Line Numbers"), [&](bool show)
+	QAction *showLineNumbersAction(menu.addAction(tr("Show Line Numbers"), this, [&](bool show)
 	{
 		SettingsManager::setOption(SettingsManager::SourceViewer_ShowLineNumbersOption, show);
 	}));
@@ -96,7 +99,7 @@ void MarginWidget::mousePressEvent(QMouseEvent *event)
 {
 	if (event->button() == Qt::LeftButton)
 	{
-		QTextCursor textCursor(m_sourceEditWidget->cursorForPosition({1, event->y()}));
+		QTextCursor textCursor(m_sourceEditWidget->cursorForPosition({1, event->pos().y()}));
 		textCursor.select(QTextCursor::LineUnderCursor);
 		textCursor.movePosition(QTextCursor::NextBlock, QTextCursor::KeepAnchor);
 
@@ -112,7 +115,7 @@ void MarginWidget::mousePressEvent(QMouseEvent *event)
 
 void MarginWidget::mouseMoveEvent(QMouseEvent *event)
 {
-	QTextCursor textCursor(m_sourceEditWidget->cursorForPosition({1, event->y()}));
+	QTextCursor textCursor(m_sourceEditWidget->cursorForPosition({1, event->pos().y()}));
 	const int currentLine(textCursor.blockNumber());
 
 	if (currentLine != m_lastClickedLine)

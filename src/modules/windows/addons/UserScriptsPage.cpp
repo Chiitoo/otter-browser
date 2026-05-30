@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2016 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2016 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2016 Piotr Wójcik <chocimier@tlen.pl>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -72,16 +72,16 @@ void UserScriptsPage::addAddon()
 	QStringList failedPaths;
 	ReplaceMode replaceMode(UnknownMode);
 
-	for (int i = 0; i < sourcePaths.count(); ++i)
+	for (const QString &sourcePath: sourcePaths)
 	{
-		if (sourcePaths.at(i).isEmpty())
+		if (sourcePath.isEmpty())
 		{
 			continue;
 		}
 
-		const QString scriptName(QFileInfo(sourcePaths.at(i)).completeBaseName());
+		const QString scriptName(QFileInfo(sourcePath).completeBaseName());
 		const QString targetDirectory(QDir(SessionsManager::getWritableDataPath(QLatin1String("scripts"))).filePath(scriptName));
-		const QString targetPath(QDir(targetDirectory).filePath(QFileInfo(sourcePaths.at(i)).fileName()));
+		const QString targetPath(QDir(targetDirectory).filePath(QFileInfo(sourcePath).fileName()));
 		bool isReplacingScript(false);
 
 		if (QFile::exists(targetPath))
@@ -105,7 +105,7 @@ void UserScriptsPage::addAddon()
 				messageBox.addButton(QMessageBox::Yes);
 				messageBox.addButton(QMessageBox::No);
 
-				if (i < (sourcePaths.count() - 1))
+				if (sourcePath != sourcePaths.last())
 				{
 					messageBox.setCheckBox(new QCheckBox(tr("Apply to all")));
 				}
@@ -126,9 +126,9 @@ void UserScriptsPage::addAddon()
 			}
 		}
 
-		if ((isReplacingScript && !QDir().remove(targetPath)) || (!isReplacingScript && !Utils::ensureDirectoryExists(targetDirectory)) || !QFile::copy(sourcePaths.at(i), targetPath))
+		if ((isReplacingScript && !QDir().remove(targetPath)) || (!isReplacingScript && !Utils::ensureDirectoryExists(targetDirectory)) || !QFile::copy(sourcePath, targetPath))
 		{
-			failedPaths.append(sourcePaths.at(i));
+			failedPaths.append(sourcePath);
 
 			continue;
 		}
@@ -165,9 +165,9 @@ void UserScriptsPage::openAddons()
 {
 	const QVector<UserScript*> addons(getSelectedUserScripts());
 
-	for (int i = 0; i < addons.count(); ++i)
+	for (UserScript *addon: addons)
 	{
-		Utils::runApplication({}, addons.at(i)->getPath());
+		Utils::runApplication({}, addon->getPath());
 	}
 }
 
@@ -175,11 +175,11 @@ void UserScriptsPage::reloadAddons()
 {
 	const QVector<UserScript*> addons(getSelectedUserScripts());
 
-	for (int i = 0; i < addons.count(); ++i)
+	for (UserScript *addon: addons)
 	{
-		addons.at(i)->reload();
+		addon->reload();
 
-		updateAddonEntry(addons.at(i));
+		updateAddonEntry(addon);
 	}
 }
 
@@ -194,11 +194,11 @@ void UserScriptsPage::removeAddons()
 
 	bool hasAddonsToRemove(false);
 
-	for (int i = 0; i < addons.count(); ++i)
+	for (UserScript *addon: addons)
 	{
-		if (addons.at(i)->canRemove())
+		if (addon->canRemove())
 		{
-			m_addonsToRemove.append(addons.at(i)->getName());
+			m_addonsToRemove.append(addon->getName());
 
 			hasAddonsToRemove = true;
 		}
@@ -225,9 +225,11 @@ void UserScriptsPage::updateDetails()
 
 		if (script)
 		{
+			const QUrl homePage(script->getHomePage());
+
 			titleEntry.value = script->getTitle();
-			homePageEntry.value = script->getHomePage().toDisplayString();
-			homePageEntry.isUrl = !script->getHomePage().isEmpty();
+			homePageEntry.value = homePage.toDisplayString();
+			homePageEntry.isUrl = !homePage.isEmpty();
 		}
 	}
 
@@ -277,7 +279,9 @@ void UserScriptsPage::save()
 
 	for (int i = (indexesToRemove.count() - 1); i >= 0; --i)
 	{
-		model->removeRow(indexesToRemove.at(i).row(), indexesToRemove.at(i).parent());
+		const QModelIndex index(indexesToRemove.at(i));
+
+		model->removeRow(index.row(), index.parent());
 	}
 
 	m_addonsToAdd.clear();

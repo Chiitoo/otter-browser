@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2016 Piotr Wójcik <chocimier@tlen.pl>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -114,9 +114,11 @@ void FilePathWidget::focusOutEvent(QFocusEvent *event)
 {
 	QWidget::focusOutEvent(event);
 
-	if (m_initialPath != getPath())
+	const QString path(getPath());
+
+	if (m_initialPath != path)
 	{
-		emit pathChanged(getPath());
+		emit pathChanged(path);
 	}
 }
 

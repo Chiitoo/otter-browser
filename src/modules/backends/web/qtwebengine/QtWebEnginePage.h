@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2015 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2016 - 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -24,8 +24,13 @@
 #include "../../../../core/SessionsManager.h"
 #include "../../../../ui/WebWidget.h"
 
+#if QT_VERSION >= 0x060000
+#include <QtWebEngineCore/QWebEngineCertificateError>
+#include <QtWebEngineCore/QWebEnginePage>
+#else
 #include <QtWebEngineWidgets/QWebEngineCertificateError>
 #include <QtWebEngineWidgets/QWebEnginePage>
+#endif
 
 namespace Otter
 {
@@ -69,12 +74,10 @@ protected:
 	QString createJavaScriptList(const QStringList &rules) const;
 	QStringList chooseFiles(FileSelectionMode mode, const QStringList &oldFiles, const QStringList &acceptedMimeTypes) override;
 	bool acceptNavigationRequest(const QUrl &url, NavigationType type, bool isMainFrame) override;
-	bool certificateError(const QWebEngineCertificateError &error) override;
 	bool javaScriptConfirm(const QUrl &url, const QString &message) override;
 	bool javaScriptPrompt(const QUrl &url, const QString &message, const QString &defaultValue, QString *result) override;
 
 protected slots:
-	void validatePopup(const QUrl &url);
 	void handleLoadFinished();
 
 private:
@@ -86,6 +89,9 @@ private:
 	bool m_isIgnoringJavaScriptPopups;
 	bool m_isViewingMedia;
 	bool m_isPopup;
+
+private slots:
+	bool handleCertificateError(QWebEngineCertificateError error);
 
 signals:
 	void requestedNewWindow(WebWidget *widget, SessionsManager::OpenHints hints, const QVariantMap &parameters);

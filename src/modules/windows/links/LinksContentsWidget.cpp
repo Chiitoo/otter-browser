@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2018 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2018 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -29,13 +29,11 @@
 #include "ui_LinksContentsWidget.h"
 
 #include <QtGui/QClipboard>
-#include <QtWidgets/QDesktopWidget>
-#include <QtWidgets/QToolTip>
 
 namespace Otter
 {
 
-LinksContentsWidget::LinksContentsWidget(const QVariantMap &parameters, QWidget *parent) : ActiveWindowObserverContentsWidget(parameters, nullptr, parent),
+LinksContentsWidget::LinksContentsWidget(const QVariantMap &parameters, QWidget *parent) : ActiveWindowObserverContentsWidget(QLatin1String("links"), parameters, nullptr, parent),
 	m_isLocked(false),
 	m_ui(new Ui::LinksContentsWidget)
 {
@@ -53,11 +51,13 @@ LinksContentsWidget::LinksContentsWidget(const QVariantMap &parameters, QWidget 
 		{
 			disconnect(previousWindow, &Window::loadingStateChanged, this, &LinksContentsWidget::updateLinks);
 
-			if (previousWindow->getWebWidget())
-			{
-				previousWindow->getWebWidget()->stopWatchingChanges(this, WebWidget::LinksWatcher);
+			WebWidget *webWidget(previousWindow->getWebWidget());
 
-				disconnect(previousWindow->getWebWidget(), &WebWidget::watchedDataChanged, this, &LinksContentsWidget::handleWatchedDataChanged);
+			if (webWidget)
+			{
+				webWidget->stopWatchingChanges(this, WebWidget::LinksWatcher);
+
+				disconnect(webWidget, &WebWidget::watchedDataChanged, this, &LinksContentsWidget::handleWatchedDataChanged);
 			}
 		}
 
@@ -65,11 +65,13 @@ LinksContentsWidget::LinksContentsWidget(const QVariantMap &parameters, QWidget 
 		{
 			connect(window, &Window::loadingStateChanged, this, &LinksContentsWidget::updateLinks);
 
-			if (window->getWebWidget())
-			{
-				window->getWebWidget()->startWatchingChanges(this, WebWidget::LinksWatcher);
+			WebWidget *webWidget(window->getWebWidget());
 
-				connect(window->getWebWidget(), &WebWidget::watchedDataChanged, this, &LinksContentsWidget::handleWatchedDataChanged);
+			if (webWidget)
+			{
+				webWidget->startWatchingChanges(this, WebWidget::LinksWatcher);
+
+				connect(webWidget, &WebWidget::watchedDataChanged, this, &LinksContentsWidget::handleWatchedDataChanged);
 			}
 		}
 
@@ -82,11 +84,13 @@ LinksContentsWidget::LinksContentsWidget(const QVariantMap &parameters, QWidget 
 
 	connect(m_ui->filterLineEditWidget, &LineEditWidget::textChanged, m_ui->linksViewWidget, &ItemViewWidget::setFilterString);
 	connect(m_ui->linksViewWidget, &ItemViewWidget::customContextMenuRequested, this, &LinksContentsWidget::showContextMenu);
-	connect(m_ui->linksViewWidget, &ItemViewWidget::clicked, [&](const QModelIndex &index)
+	connect(m_ui->linksViewWidget, &ItemViewWidget::clicked, this, [&](const QModelIndex &index)
 	{
-		if (!index.data(Qt::StatusTipRole).isNull())
+		const QVariant data(index.data(Qt::StatusTipRole));
+
+		if (!data.isNull())
 		{
-			Application::triggerAction(ActionsManager::OpenUrlAction, {{QLatin1String("url"), index.data(Qt::StatusTipRole)}}, parentWidget());
+			Application::triggerAction(ActionsManager::OpenUrlAction, {{QLatin1String("url"), data}}, parentWidget());
 		}
 	});
 	connect(m_ui->linksViewWidget, &ItemViewWidget::needsActionsUpdate, this, [&]()
@@ -120,9 +124,9 @@ void LinksContentsWidget::triggerAction(int identifier, const QVariantMap &param
 				QStringList links;
 				links.reserve(indexes.count());
 
-				for (int i = 0; i < indexes.count(); ++i)
+				for (const QModelIndex &index: indexes)
 				{
-					links.append(indexes.at(i).data(Qt::StatusTipRole).toString());
+					links.append(index.data(Qt::StatusTipRole).toString());
 				}
 
 				QGuiApplication::clipboard()->setText(links.join(QLatin1Char('\n')));
@@ -133,9 +137,9 @@ void LinksContentsWidget::triggerAction(int identifier, const QVariantMap &param
 			{
 				const QList<QModelIndex> indexes(m_ui->linksViewWidget->selectionModel()->selectedIndexes());
 
-				for (int i = 0; i < indexes.count(); ++i)
+				for (const QModelIndex &index: indexes)
 				{
-					BookmarksManager::addBookmark(BookmarksModel::UrlBookmark, {{BookmarksModel::UrlRole, indexes.at(i).data(Qt::StatusTipRole)}, {BookmarksModel::TitleRole, indexes.at(i).data(Qt::DisplayRole)}}, nullptr);
+					BookmarksManager::addBookmark(BookmarksModel::UrlBookmark, {{BookmarksModel::UrlRole, index.data(Qt::StatusTipRole)}, {BookmarksModel::TitleRole, index.data(Qt::DisplayRole)}}, nullptr);
 				}
 			}
 
@@ -174,10 +178,11 @@ void LinksContentsWidget::openLink()
 	if (action)
 	{
 		const QList<QModelIndex> indexes(m_ui->linksViewWidget->selectionModel()->selectedIndexes());
+		const QVariant hints(static_cast<SessionsManager::OpenHints>(action->data().toInt()));
 
-		for (int i = 0; i < indexes.count(); ++i)
+		for (const QModelIndex &index: indexes)
 		{
-			Application::triggerAction(ActionsManager::OpenUrlAction, {{QLatin1String("url"), indexes.at(i).data(Qt::StatusTipRole)}, {QLatin1String("hints"), QVariant((action ? static_cast<SessionsManager::OpenHints>(action->data().toInt()) : SessionsManager::DefaultOpen))}}, parentWidget());
+			Application::triggerAction(ActionsManager::OpenUrlAction, {{QLatin1String("url"), index.data(Qt::StatusTipRole)}, {QLatin1String("hints"), hints}}, parentWidget());
 		}
 	}
 }
@@ -214,10 +219,8 @@ void LinksContentsWidget::updateLinks()
 	{
 		m_ui->linksViewWidget->getSourceModel()->appendRow(new ItemModel::Item(ItemModel::SeparatorType));
 
-		for (int i = 0; i < links.count(); ++i)
+		for (const WebWidget::LinkUrl &link: links)
 		{
-			const WebWidget::LinkUrl link(links.at(i));
-
 			addLink(link.title, link.url);
 		}
 	}
@@ -251,32 +254,12 @@ void LinksContentsWidget::showContextMenu(const QPoint &position)
 	lockPanelAction->setCheckable(true);
 	lockPanelAction->setChecked(m_isLocked);
 
-	connect(lockPanelAction, &QAction::toggled, [&](bool isChecked)
+	connect(lockPanelAction, &QAction::toggled, this, [&](bool isChecked)
 	{
 		m_isLocked = isChecked;
 	});
 
 	menu.exec(m_ui->linksViewWidget->mapToGlobal(position));
-}
-
-QString LinksContentsWidget::getTitle() const
-{
-	return tr("Links");
-}
-
-QLatin1String LinksContentsWidget::getType() const
-{
-	return QLatin1String("links");
-}
-
-QUrl LinksContentsWidget::getUrl() const
-{
-	return {};
-}
-
-QIcon LinksContentsWidget::getIcon() const
-{
-	return ThemesManager::createIcon(QLatin1String("links"), false);
 }
 
 ActionsManager::ActionDefinition::State LinksContentsWidget::getActionState(int identifier, const QVariantMap &parameters) const
@@ -311,15 +294,18 @@ bool LinksContentsWidget::eventFilter(QObject *object, QEvent *event)
 
 		if (index.isValid())
 		{
-			if (index.data(Qt::DisplayRole).toString() != index.data(Qt::StatusTipRole).toUrl().toDisplayString(QUrl::RemovePassword))
+			const QString title(index.data(Qt::DisplayRole).toString());
+			const QString address(index.data(Qt::StatusTipRole).toUrl().toDisplayString(QUrl::RemovePassword));
+
+			if (title != address)
 			{
-				toolTip.append(tr("Title: %1").arg(index.data(Qt::DisplayRole).toString()) + QLatin1Char('\n'));
+				toolTip.append(tr("Title: %1").arg(title) + QLatin1Char('\n'));
 			}
 
-			toolTip.append(tr("Address: %1").arg(index.data(Qt::StatusTipRole).toUrl().toDisplayString()));
+			toolTip.append(tr("Address: %1").arg(address));
 		}
 
-		QToolTip::showText(helpEvent->globalPos(), QFontMetrics(QToolTip::font()).elidedText(toolTip, Qt::ElideRight, (QApplication::desktop()->screenGeometry(m_ui->linksViewWidget).width() / 2)), m_ui->linksViewWidget, m_ui->linksViewWidget->visualRect(index));
+		Utils::showToolTip(helpEvent->globalPos(), toolTip, m_ui->linksViewWidget, m_ui->linksViewWidget->visualRect(index));
 
 		return true;
 	}

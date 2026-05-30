@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2015 Piotr Wójcik <chocimier@tlen.pl>
 * Copyright (C) 2015 Jan Bajer aka bajasoft <jbajer@gmail.com>
 * Copyright (C) 2017 Piktas Zuikis <piktas.zuikis@inbox.lt>
@@ -26,7 +26,6 @@
 #include "Menu.h"
 #include "TransferDialog.h"
 #include "Window.h"
-#include "../core/Application.h"
 #include "../core/BookmarksManager.h"
 #include "../core/ContentFiltersManager.h"
 #include "../core/HandlersManager.h"
@@ -43,7 +42,9 @@
 #include <QtCore/QDir>
 #include <QtCore/QJsonArray>
 #include <QtCore/QJsonDocument>
+#include <QtGui/QGuiApplication>
 #include <QtGui/QClipboard>
+#include <QtGui/QPainter>
 #include <QtWidgets/QToolTip>
 
 namespace Otter
@@ -51,7 +52,7 @@ namespace Otter
 
 QString WebWidget::m_fastForwardScript;
 
-WebWidget::WebWidget(const QVariantMap &parameters, WebBackend *backend, ContentsWidget *parent) : QWidget(parent),
+WebWidget::WebWidget(WebBackend *backend, ContentsWidget *parent) : QWidget(parent),
 	m_parent(parent),
 	m_toolTipParentWidget(nullptr),
 	m_backend(backend),
@@ -62,8 +63,6 @@ WebWidget::WebWidget(const QVariantMap &parameters, WebBackend *backend, Content
 	m_toolTipTimer(0),
 	m_toolTipEntryEnumerator(metaObject()->indexOfEnumerator(QLatin1String("ToolTipEntry").data()))
 {
-	Q_UNUSED(parameters)
-
 	connect(this, &WebWidget::loadingStateChanged, this, [&](LoadingState state)
 	{
 		if (m_loadingTimer != 0)
@@ -258,15 +257,15 @@ void WebWidget::clearOptions()
 
 	m_options.clear();
 
-	for (int i = 0; i < identifiers.count(); ++i)
+	for (const int identifier: identifiers)
 	{
-		emit optionChanged(identifiers.at(i), SettingsManager::getOption(identifiers.at(i), host));
+		emit optionChanged(identifier, SettingsManager::getOption(identifier, host));
 	}
 
 	emit arbitraryActionsStateChanged({ActionsManager::ResetQuickPreferencesAction});
 }
 
-void WebWidget::fillPassword(const PasswordsManager::PasswordInformation &password)
+void WebWidget::fillPassword(const PasswordsManager::Password &password)
 {
 	Q_UNUSED(password)
 }
@@ -280,8 +279,8 @@ void WebWidget::openUrl(const QUrl &url, SessionsManager::OpenHints hints)
 {
 	switch (hints)
 	{
-		case SessionsManager::CurrentTabOpen:
 		case SessionsManager::DefaultOpen:
+		case SessionsManager::CurrentTabOpen:
 			setUrl(url, false);
 
 			break;
@@ -311,7 +310,7 @@ void WebWidget::handleToolTipEvent(QHelpEvent *event, QWidget *widget)
 		return;
 	}
 
-	EnumeratorMapper enumeratorMapper(metaObject()->enumerator(m_toolTipEntryEnumerator), QLatin1String("Entry"));
+	const EnumeratorMapper enumeratorMapper(metaObject()->enumerator(m_toolTipEntryEnumerator), QLatin1String("Entry"));
 	const QStringList rawLayout(SettingsManager::getOption(SettingsManager::Interface_ToolTipLayoutOption).toStringList());
 	QHash<ToolTipEntry, QString> entries;
 	QVector<ToolTipEntry> layout;
@@ -362,11 +361,11 @@ void WebWidget::handleToolTipEvent(QHelpEvent *event, QWidget *widget)
 	}
 	else
 	{
-		for (int i = 0; i < layout.count(); ++i)
+		for (const ToolTipEntry entry: layout)
 		{
-			if (entries.contains(layout.at(i)))
+			if (entries.contains(entry))
 			{
-				switch (layout.at(i))
+				switch (entry)
 				{
 					case LastVisitedEntry:
 						m_toolTip.append(tr("Last Visited: %1").arg(entries[LastVisitedEntry]));
@@ -496,13 +495,14 @@ void WebWidget::showContextMenu(const QPoint &position)
 	emit categorizedActionsStateChanged({ActionsManager::ActionDefinition::EditingCategory});
 
 	QStringList includeSections;
+	includeSections.reserve(1);
 
 	if (m_hitResult.flags.testFlag(HitTestResult::IsFormTest))
 	{
 		includeSections.append(QLatin1String("form"));
 	}
 
-	if (!m_hitResult.imageUrl.isValid() && m_hitResult.flags.testFlag(HitTestResult::IsSelectedTest) && hasSelection)
+	if (hasSelection && m_hitResult.flags.testFlag(HitTestResult::IsSelectedTest) && !m_hitResult.imageUrl.isValid())
 	{
 		includeSections.append(QLatin1String("selection"));
 	}
@@ -519,7 +519,7 @@ void WebWidget::showContextMenu(const QPoint &position)
 		}
 	}
 
-	if (!m_hitResult.imageUrl.isEmpty())
+	if (m_hitResult.imageUrl.isValid())
 	{
 		includeSections.append(QLatin1String("image"));
 	}
@@ -542,11 +542,6 @@ void WebWidget::showContextMenu(const QPoint &position)
 		{
 			includeSections.append(QLatin1String("frame"));
 		}
-	}
-
-	if (includeSections.isEmpty())
-	{
-		return;
 	}
 
 	ActionExecutor::Object executor(this, this);
@@ -756,15 +751,15 @@ void WebWidget::setOptions(const QHash<int, QVariant> &options, const QStringLis
 
 	const QString host(Utils::extractHost(getUrl()));
 
-	for (int i = 0; i < identifiers.count(); ++i)
+	for (const int identifier: std::as_const(identifiers))
 	{
-		if (m_options.contains(identifiers.at(i)))
+		if (m_options.contains(identifier))
 		{
-			emit optionChanged(identifiers.at(i), m_options[identifiers.at(i)]);
+			emit optionChanged(identifier, m_options[identifier]);
 		}
 		else
 		{
-			emit optionChanged(identifiers.at(i), SettingsManager::getOption(identifiers.at(i), host));
+			emit optionChanged(identifier, SettingsManager::getOption(identifier, host));
 		}
 	}
 
@@ -861,9 +856,9 @@ QString WebWidget::getSavePath(const QVector<SaveFormat> &allowedFormats, SaveFo
 	QStringList filters;
 	filters.reserve(allowedFormats.count());
 
-	for (int i = 0; i < allowedFormats.count(); ++i)
+	for (const SaveFormat format: allowedFormats)
 	{
-		filters.append(formats.value(allowedFormats.at(i)));
+		filters.append(formats.value(format));
 	}
 
 	const SaveInformation result(Utils::getSavePath(suggestSaveFileName(SingleFileSaveFormat), {}, filters));
@@ -948,21 +943,21 @@ QString WebWidget::getFastForwardScript(bool isSelectingTheBestLink)
 
 		const QStringList categories({QLatin1String("Href"), QLatin1String("Class"), QLatin1String("Id"), QLatin1String("Text")});
 
-		for (int i = 0; i < categories.count(); ++i)
+		for (const QString &category: categories)
 		{
-			settings.beginGroup(categories.at(i));
+			settings.beginGroup(category);
 
 			const QStringList keys(settings.getKeys());
 			QJsonArray tokensArray;
 
-			for (int j = 0; j < keys.count(); ++j)
+			for (const QString &key: keys)
 			{
-				tokensArray.append(QJsonObject({{QLatin1String("value"), keys.at(j).toUpper()}, {QLatin1String("score"), settings.getValue(keys.at(j)).toInt()}}));
+				tokensArray.append(QJsonObject({{QLatin1String("value"), key.toUpper()}, {QLatin1String("score"), settings.getValue(key).toInt()}}));
 			}
 
 			settings.endGroup();
 
-			script.replace(QLatin1Char('{') + categories.at(i).toLower() + QLatin1String("Tokens}"), QString::fromUtf8(QJsonDocument(tokensArray).toJson(QJsonDocument::Compact)));
+			script.replace(QLatin1Char('{') + category.toLower() + QLatin1String("Tokens}"), QString::fromUtf8(QJsonDocument(tokensArray).toJson(QJsonDocument::Compact)));
 		}
 
 		m_fastForwardScript = script;
@@ -1033,8 +1028,26 @@ QUrl WebWidget::getRequestedUrl() const
 
 QPixmap WebWidget::createThumbnail(const QSize &size)
 {
-	QPixmap pixmap(size);
+	const QString host(Utils::extractHost(getUrl()));
+	const QString text(host.mid(0, 1).toUpper());
+	QCryptographicHash hash(QCryptographicHash::Md5);
+	hash.addData(host.toUtf8());
+
+	QPixmap pixmap(size.isValid() ? size : getDefaultThumbnailSize());
+	pixmap.setDevicePixelRatio(devicePixelRatio());
 	pixmap.fill(Qt::white);
+
+	QPainter painter(&pixmap);
+	QFont font(painter.font());
+	font.setPixelSize((pixmap.rect().height() / 3) * 2);
+
+	painter.setFont(font);
+	painter.setRenderHints(QPainter::Antialiasing);
+	painter.setPen(QPen(QColor(Qt::gray)));
+	painter.drawText(pixmap.rect().adjusted(0, 1, 1, 0), Qt::AlignCenter, text);
+	painter.setPen(QPen(QColor(QLatin1Char('#') + QString::fromLatin1(hash.result().toHex()).mid(0, 6))));
+	painter.drawText(pixmap.rect(), Qt::AlignCenter, text);
+	painter.end();
 
 	return pixmap;
 }
@@ -1042,6 +1055,11 @@ QPixmap WebWidget::createThumbnail(const QSize &size)
 QPoint WebWidget::getClickPosition() const
 {
 	return m_clickPosition;
+}
+
+QSize WebWidget::getDefaultThumbnailSize()
+{
+	return QSize(260, 170);
 }
 
 QRect WebWidget::getGeometry(bool excludeScrollBars) const
@@ -1416,30 +1434,34 @@ ActionsManager::ActionDefinition::State WebWidget::getActionState(int identifier
 			break;
 		case ActionsManager::CheckSpellingAction:
 			{
-				const QVector<SpellCheckManager::DictionaryInformation> dictionaries(getDictionaries());
-
-				state.isEnabled = (getOption(SettingsManager::Browser_EnableSpellCheckOption, getUrl()).toBool() && !dictionaries.isEmpty());
+				state.isEnabled = (getOption(SettingsManager::Browser_EnableSpellCheckOption, getUrl()).toBool() && !getDictionaries().isEmpty());
 
 				if (parameters.contains(QLatin1String("dictionary")))
 				{
-					const QString dictionary(parameters[QLatin1String("dictionary")].toString());
+					const QString language(parameters[QLatin1String("dictionary")].toString());
+					const SpellCheckManager::Dictionary dictionary(SpellCheckManager::getDictionary(language));
+					QStringList activeDictionaries;
 
-					state.text = dictionary;
-					state.isChecked = (dictionary == (getOption(SettingsManager::Browser_SpellCheckDictionaryOption).isNull() ? SpellCheckManager::getDefaultDictionary() : getOption(SettingsManager::Browser_SpellCheckDictionaryOption).toString()));
-
-					for (int i = 0; i < dictionaries.count(); ++i)
+					if (getOption(SettingsManager::Browser_SpellCheckDictionaryOption).isNull())
 					{
-						if (dictionaries.at(i).language == dictionary)
-						{
-							state.text = dictionaries.at(i).title;
+						activeDictionaries = QStringList(SpellCheckManager::getDefaultDictionary());
+					}
+					else
+					{
+						activeDictionaries = getOption(SettingsManager::Browser_SpellCheckDictionaryOption).toStringList();
+					}
 
-							break;
-						}
+					state.text = language;
+					state.isChecked = activeDictionaries.contains(language);
+
+					if (dictionary.isValid())
+					{
+						state.text = dictionary.title;
 					}
 				}
 				else
 				{
-					state.isChecked = (m_hitResult.flags.testFlag(HitTestResult::IsSpellCheckEnabled));
+					state.isChecked = m_hitResult.flags.testFlag(HitTestResult::IsSpellCheckEnabledTest);
 				}
 			}
 
@@ -1546,7 +1568,7 @@ QStringList WebWidget::getStyleSheets() const
 	return {};
 }
 
-QVector<SpellCheckManager::DictionaryInformation> WebWidget::getDictionaries() const
+QVector<SpellCheckManager::Dictionary> WebWidget::getDictionaries() const
 {
 	return SpellCheckManager::getDictionaries();
 }
@@ -1617,6 +1639,11 @@ WebWidget::ContentStates WebWidget::getContentState() const
 	if (getOption(SettingsManager::Security_EnableFraudCheckingOption, url).toBool() && ContentFiltersManager::isFraud(url))
 	{
 		state |= FraudContentState;
+	}
+
+	if (Utils::isUrlAmbiguous(url))
+	{
+		state |= AmbiguousContentState;
 	}
 
 	return state;
@@ -1793,23 +1820,6 @@ bool WebWidget::canViewSource() const
 	return true;
 }
 
-bool WebWidget::isInspecting() const
-{
-	return false;
-}
-
-bool WebWidget::isPopup() const
-{
-	return false;
-}
-
-bool WebWidget::isScrollBar(const QPoint &position) const
-{
-	Q_UNUSED(position)
-
-	return false;
-}
-
 bool WebWidget::hasOption(int identifier) const
 {
 	return m_options.contains(identifier);
@@ -1839,6 +1849,23 @@ bool WebWidget::isAudioMuted() const
 
 bool WebWidget::isFullScreen() const
 {
+	return false;
+}
+
+bool WebWidget::isInspecting() const
+{
+	return false;
+}
+
+bool WebWidget::isPopup() const
+{
+	return false;
+}
+
+bool WebWidget::isScrollBar(const QPoint &position) const
+{
+	Q_UNUSED(position)
+
 	return false;
 }
 

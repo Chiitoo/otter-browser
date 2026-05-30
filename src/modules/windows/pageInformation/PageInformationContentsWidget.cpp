@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2017 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2017 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -18,7 +18,6 @@
 **************************************************************************/
 
 #include "PageInformationContentsWidget.h"
-#include "../../../core/ThemesManager.h"
 #include "../../../ui/Action.h"
 #include "../../../ui/MainWindow.h"
 #include "../../../ui/Window.h"
@@ -30,7 +29,7 @@
 namespace Otter
 {
 
-PageInformationContentsWidget::PageInformationContentsWidget(const QVariantMap &parameters, QWidget *parent) : ActiveWindowObserverContentsWidget(parameters, nullptr, parent),
+PageInformationContentsWidget::PageInformationContentsWidget(const QVariantMap &parameters, QWidget *parent) : ActiveWindowObserverContentsWidget(QLatin1String("pageInformation"), parameters, nullptr, parent),
 	m_ui(new Ui::PageInformationContentsWidget)
 {
 	m_ui->setupUi(this);
@@ -40,10 +39,10 @@ PageInformationContentsWidget::PageInformationContentsWidget(const QVariantMap &
 	QStandardItemModel *model(new QStandardItemModel(this));
 	model->setHorizontalHeaderLabels({tr("Name"), tr("Value")});
 
-	for (int i = 0; i < sections.count(); ++i)
+	for (SectionName section: sections)
 	{
 		QStandardItem *item(new QStandardItem());
-		item->setData(sections.at(i), Qt::UserRole);
+		item->setData(section, Qt::UserRole);
 
 		model->appendRow({item, new QStandardItem()});
 	}
@@ -60,11 +59,13 @@ PageInformationContentsWidget::PageInformationContentsWidget(const QVariantMap &
 		{
 			disconnect(previousWindow, &Window::loadingStateChanged, this, &PageInformationContentsWidget::updateSections);
 
-			if (previousWindow->getWebWidget())
-			{
-				previousWindow->getWebWidget()->stopWatchingChanges(this, WebWidget::MetaDataWatcher);
+			WebWidget *webWidget(previousWindow->getWebWidget());
 
-				disconnect(previousWindow->getWebWidget(), &WebWidget::watchedDataChanged, this, &PageInformationContentsWidget::handleWatchedDataChanged);
+			if (webWidget)
+			{
+				webWidget->stopWatchingChanges(this, WebWidget::MetaDataWatcher);
+
+				disconnect(webWidget, &WebWidget::watchedDataChanged, this, &PageInformationContentsWidget::handleWatchedDataChanged);
 			}
 		}
 
@@ -72,11 +73,13 @@ PageInformationContentsWidget::PageInformationContentsWidget(const QVariantMap &
 		{
 			connect(window, &Window::loadingStateChanged, this, &PageInformationContentsWidget::updateSections);
 
-			if (window->getWebWidget())
-			{
-				window->getWebWidget()->stopWatchingChanges(this, WebWidget::MetaDataWatcher);
+			WebWidget *webWidget(window->getWebWidget());
 
-				connect(window->getWebWidget(), &WebWidget::watchedDataChanged, this, &PageInformationContentsWidget::handleWatchedDataChanged);
+			if (webWidget)
+			{
+				webWidget->stopWatchingChanges(this, WebWidget::MetaDataWatcher);
+
+				connect(webWidget, &WebWidget::watchedDataChanged, this, &PageInformationContentsWidget::handleWatchedDataChanged);
 			}
 		}
 
@@ -165,22 +168,25 @@ void PageInformationContentsWidget::updateSections()
 
 					addEntry(sectionItem, tr("Title"), (window ? window->getTitle() : QString()));
 
-					if (!window || window->getUrl().scheme() != QLatin1String("about"))
+					if (window && window->getUrl().scheme() != QLatin1String("about"))
 					{
-						addEntry(sectionItem, tr("MIME type"), (canGetPageInformation ? window->getWebWidget()->getPageInformation(WebWidget::DocumentMimeTypeInformation).toString() : QString()));
-						addEntry(sectionItem, tr("Document size"), (canGetPageInformation ? Utils::formatUnit(window->getWebWidget()->getPageInformation(WebWidget::DocumentBytesTotalInformation).toLongLong(), false, 1, true) : QString()));
-						addEntry(sectionItem, tr("Total size"), (canGetPageInformation ? Utils::formatUnit(window->getWebWidget()->getPageInformation(WebWidget::TotalBytesTotalInformation).toLongLong(), false, 1, true) : QString()));
+						WebWidget *webWidget(window->getWebWidget());
+						const int amountOfBlockedRequests(webWidget->getPageInformation(WebWidget::RequestsBlockedInformation).toInt());
 
-						if (canGetPageInformation && window->getWebWidget()->getPageInformation(WebWidget::RequestsBlockedInformation).toInt() > 0)
+						addEntry(sectionItem, tr("MIME type"), (canGetPageInformation ? webWidget->getPageInformation(WebWidget::DocumentMimeTypeInformation).toString() : QString()));
+						addEntry(sectionItem, tr("Document size"), (canGetPageInformation ? Utils::formatUnit(webWidget->getPageInformation(WebWidget::DocumentBytesTotalInformation).toLongLong(), false, 1, true) : QString()));
+						addEntry(sectionItem, tr("Total size"), (canGetPageInformation ? Utils::formatUnit(webWidget->getPageInformation(WebWidget::TotalBytesTotalInformation).toLongLong(), false, 1, true) : QString()));
+
+						if (canGetPageInformation && amountOfBlockedRequests > 0)
 						{
-							addEntry(sectionItem, tr("Number of requests"), tr("%1 (%n blocked)", "", window->getWebWidget()->getPageInformation(WebWidget::RequestsBlockedInformation).toInt()).arg(window->getWebWidget()->getPageInformation(WebWidget::RequestsFinishedInformation).toInt()));
+							addEntry(sectionItem, tr("Number of requests"), tr("%1 (%n blocked)", "", amountOfBlockedRequests).arg(webWidget->getPageInformation(WebWidget::RequestsFinishedInformation).toInt()));
 						}
 						else
 						{
-							addEntry(sectionItem, tr("Number of requests"), (canGetPageInformation ? QString::number(window->getWebWidget()->getPageInformation(WebWidget::RequestsFinishedInformation).toInt()) : QString()));
+							addEntry(sectionItem, tr("Number of requests"), (canGetPageInformation ? QString::number(webWidget->getPageInformation(WebWidget::RequestsFinishedInformation).toInt()) : QString()));
 						}
 
-						addEntry(sectionItem, tr("Downloaded"), (canGetPageInformation ? Utils::formatDateTime(window->getWebWidget()->getPageInformation(WebWidget::LoadingFinishedInformation).toDateTime(), {}, false) : QString()));
+						addEntry(sectionItem, tr("Downloaded"), (canGetPageInformation ? Utils::formatDateTime(webWidget->getPageInformation(WebWidget::LoadingFinishedInformation).toDateTime(), {}, false) : QString()));
 					}
 				}
 
@@ -265,26 +271,6 @@ void PageInformationContentsWidget::showContextMenu(const QPoint &position)
 		menu.addAction(new Action(ActionsManager::CopyAction, {}, ActionExecutor::Object(this, this), &menu));
 		menu.exec(m_ui->informationViewWidget->mapToGlobal(position));
 	}
-}
-
-QString PageInformationContentsWidget::getTitle() const
-{
-	return tr("Page Information");
-}
-
-QLatin1String PageInformationContentsWidget::getType() const
-{
-	return QLatin1String("pageInformation");
-}
-
-QUrl PageInformationContentsWidget::getUrl() const
-{
-	return {};
-}
-
-QIcon PageInformationContentsWidget::getIcon() const
-{
-	return ThemesManager::createIcon(QLatin1String("view-information"), false);
 }
 
 ActionsManager::ActionDefinition::State PageInformationContentsWidget::getActionState(int identifier, const QVariantMap &parameters) const

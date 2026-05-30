@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 - 2015 Piotr Wójcik <chocimier@tlen.pl>
 * Copyright (C) 2015 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
@@ -31,7 +31,7 @@
 namespace Otter
 {
 
-class KeyboardProfile final : public Addon
+class KeyboardProfile final : public JsonAddon
 {
 public:
 	enum LoadMode
@@ -53,38 +53,19 @@ public:
 
 	explicit KeyboardProfile(const QString &identifier = {}, LoadMode mode = StandardMode);
 
-	void setTitle(const QString &title);
-	void setDescription(const QString &description);
-	void setAuthor(const QString &author);
-	void setVersion(const QString &version);
 	void setDefinitions(const QHash<int, QVector<Action> > &definitions);
-	void setMetaData(const MetaData &metaData);
-	void setModified(bool isModified);
 	QString getName() const override;
-	QString getTitle() const override;
-	QString getDescription() const override;
-	QString getAuthor() const;
-	QString getVersion() const override;
-	QUrl getHomePage() const override;
-	MetaData getMetaData() const;
 	QHash<int, QVector<Action> > getDefinitions() const;
-	bool isModified() const;
 	bool isValid() const;
 	bool save();
 
 protected:
-	QJsonArray createShortcutsArray(const QVector<QKeySequence> &shortcuts) const;
-	QVector<QKeySequence> loadShortcuts(const QJsonArray &rawShortcuts, bool areSingleKeyShortcutsAllowed) const;
+	static QJsonArray createShortcutsArray(const QVector<QKeySequence> &shortcuts);
+	static QVector<QKeySequence> loadShortcuts(const QJsonArray &rawShortcuts, bool areSingleKeyShortcutsAllowed);
 
 private:
 	QString m_identifier;
-	QString m_title;
-	QString m_description;
-	QString m_author;
-	QString m_version;
-	QUrl m_homePage;
 	QHash<int, QVector<Action> > m_definitions;
-	bool m_isModified;
 };
 
 class ActionsManager final : public QObject

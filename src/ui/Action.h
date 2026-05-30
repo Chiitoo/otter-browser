@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -22,7 +22,11 @@
 
 #include "../core/ActionExecutor.h"
 
+#if QT_VERSION >= 0x060000
+#include <QtGui/QAction>
+#else
 #include <QtWidgets/QAction>
+#endif
 
 namespace Otter
 {
@@ -35,8 +39,9 @@ public:
 	enum ActionFlag
 	{
 		NoFlags = 0,
-		HasCustomTextFlag = 1,
-		HasCustomIconFlag = 2
+		HasIconOverrideFlag = 1,
+		HasTextOverrideFlag = 2,
+		IsTextOverrideTranslateableFlag = 4
 	};
 
 	Q_DECLARE_FLAGS(ActionFlags, ActionFlag)
@@ -46,13 +51,14 @@ public:
 	explicit Action(int identifier, const QVariantMap &parameters, const ActionExecutor::Object &executor, QObject *parent);
 
 	void setExecutor(ActionExecutor::Object executor);
-	void setTextOverride(const QString &text, bool isTranslateable = true);
 	void setIconOverride(const QString &icon);
 	void setIconOverride(const QIcon &icon);
+	void setTextOverride(const QString &text, bool isTranslateable = true);
 	QString getTextOverride() const;
 	ActionsManager::ActionDefinition getDefinition() const;
 	QVariantMap getParameters() const;
 	int getIdentifier() const;
+	bool hasIconOverride() const;
 	bool hasTextOverride() const;
 	bool isTextOverrideTranslateable() const;
 	bool event(QEvent *event) override;
@@ -61,6 +67,7 @@ protected:
 	void initialize();
 	void updateIcon();
 	virtual void setState(const ActionsManager::ActionDefinition::State &state);
+	QMetaMethod getMethod(const char *method) const;
 
 protected slots:
 	void triggerAction(bool isChecked = false);
@@ -75,7 +82,6 @@ private:
 	QVariantMap m_parameters;
 	ActionFlags m_flags;
 	int m_identifier;
-	bool m_isTextOverrideTranslateable;
 };
 
 }

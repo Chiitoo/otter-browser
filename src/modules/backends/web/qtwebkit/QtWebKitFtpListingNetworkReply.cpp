@@ -1,7 +1,7 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
 * Copyright (C) 2014 - 2016 Piotr Wójcik <chocimier@tlen.pl>
-* Copyright (C) 2015 - 2019 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -31,8 +31,27 @@ QtWebKitFtpListingNetworkReply::QtWebKitFtpListingNetworkReply(const QNetworkReq
 	m_ftp(new QFtp(this)),
 	m_offset(0)
 {
-	connect(m_ftp, &QFtp::listInfo, this, &QtWebKitFtpListingNetworkReply::addEntry);
-	connect(m_ftp, &QFtp::readyRead, this, &QtWebKitFtpListingNetworkReply::processData);
+	connect(m_ftp, &QFtp::listInfo, this, [&](const QUrlInfo &entry)
+	{
+		if (entry.isSymLink())
+		{
+			m_symlinks.append(entry);
+		}
+		else if (entry.isDir())
+		{
+			m_directories.append(entry);
+		}
+		else
+		{
+			m_files.append(entry);
+		}
+	});
+	connect(m_ftp, &QFtp::readyRead, this, [&]()
+	{
+		m_content += m_ftp->readAll();
+
+		emit readyRead();
+	});
 	connect(m_ftp, &QFtp::commandFinished, this, &QtWebKitFtpListingNetworkReply::processCommand);
 	connect(m_ftp, &QFtp::dataTransferProgress, this, &QtWebKitFtpListingNetworkReply::downloadProgress);
 
@@ -41,45 +60,43 @@ QtWebKitFtpListingNetworkReply::QtWebKitFtpListingNetworkReply(const QNetworkReq
 
 void QtWebKitFtpListingNetworkReply::processCommand(int command, bool isError)
 {
-	Q_UNUSED(command)
-
 	if (isError)
 	{
 		open(ReadOnly | Unbuffered);
 
-		ErrorPageInformation::PageAction reloadAction;
-		reloadAction.name = QLatin1String("reloadPage");
-		reloadAction.title = QCoreApplication::translate("utils", "Try Again");
-		reloadAction.type = ErrorPageInformation::MainAction;
-
+		const QFtp::Error error(m_ftp->error());
+		const ErrorPageInformation::PageAction reloadAction({QLatin1String("reloadPage"), QCoreApplication::translate("utils", "Try Again"), ErrorPageInformation::MainAction});
 		ErrorPageInformation information;
 		information.url = request().url();
 		information.description = QStringList(m_ftp->errorString());
 		information.actions.append(reloadAction);
 
-		if (m_ftp->error() == QFtp::HostNotFound)
+		switch (error)
 		{
-			information.type = ErrorPageInformation::ServerNotFoundError;
-		}
-		else if (m_ftp->error() == QFtp::ConnectionRefused)
-		{
-			information.type = ErrorPageInformation::ConnectionRefusedError;
-		}
-		else if (m_ftp->replyCode() > 0)
-		{
-			information.title = tr("Network error %1").arg(m_ftp->replyCode());
+			case QFtp::HostNotFound:
+				information.type = ErrorPageInformation::ServerNotFoundError;
+
+				break;
+			case QFtp::ConnectionRefused:
+				information.type = ErrorPageInformation::ConnectionRefusedError;
+
+				break;
+			default:
+				if (m_ftp->replyCode() > 0)
+				{
+					information.title = tr("Network error %1").arg(m_ftp->replyCode());
+				}
+
+				break;
 		}
 
 		m_content = Utils::createErrorPage(information).toUtf8();
 
-		setHeader(QNetworkRequest::ContentTypeHeader, QVariant(QLatin1String("text/html; charset=UTF-8")));
-		setHeader(QNetworkRequest::ContentLengthHeader, QVariant(m_content.size()));
+		sendHeaders();
 
 		emit listingError();
-		emit readyRead();
-		emit finished();
 
-		if (m_ftp->error() != QFtp::NotConnected)
+		if (error != QFtp::NotConnected)
 		{
 			m_ftp->close();
 		}
@@ -91,101 +108,112 @@ void QtWebKitFtpListingNetworkReply::processCommand(int command, bool isError)
 		return;
 	}
 
-	switch (m_ftp->currentCommand())
+	const QUrl normalizedUrl(Utils::normalizeUrl(request().url()));
+
+	switch (command)
 	{
 		case QFtp::ConnectToHost:
 			m_ftp->login();
 
 			break;
 		case QFtp::Login:
-			m_ftp->list(Utils::normalizeUrl(request().url()).path());
+			m_ftp->list(normalizedUrl.path());
 
 			break;
 		case QFtp::List:
-			if (m_directories.isEmpty() && ((m_files.count() == 1 && m_symlinks.isEmpty() && request().url().path().endsWith(m_files.value(0).name())) || (m_symlinks.count() == 1 && m_files.isEmpty() && request().url().path().endsWith(m_symlinks.value(0).name()))))
 			{
-				m_ftp->get(Utils::normalizeUrl(request().url()).path());
-			}
-			else
-			{
-				open(ReadOnly | Unbuffered);
-
 				QUrl url(request().url());
-				QMimeDatabase mimeDatabase;
-				QVector<NavigationEntry> navigation;
-				const QVector<QUrlInfo> rawEntries(m_symlinks + m_directories + m_files);
-				QVector<ListingEntry> entries;
-				entries.reserve(rawEntries.count());
+				const QString path(url.path());
 
-				if (url.path().isEmpty())
+				if (m_directories.isEmpty() && ((m_files.count() == 1 && m_symlinks.isEmpty() && path.endsWith(m_files.value(0).name())) || (m_symlinks.count() == 1 && m_files.isEmpty() && path.endsWith(m_symlinks.value(0).name()))))
 				{
-					url.setPath(QLatin1String("/"));
+					m_ftp->get(normalizedUrl.path());
 				}
-
-				while (true)
+				else
 				{
-					const bool isRoot(url.path() == QLatin1String("/"));
+					open(ReadOnly | Unbuffered);
 
-					url = url.adjusted(QUrl::StripTrailingSlash);
+					const QMimeDatabase mimeDatabase;
+					QVector<NavigationEntry> navigation;
+					navigation.reserve(path.count(QLatin1Char('/')) + 1);
 
-					NavigationEntry entry;
-					entry.name = (isRoot ? url.toString() : url.fileName() + QLatin1Char('/'));
-					entry.url = url.url();
+					const QVector<QUrlInfo> rawEntries(m_symlinks + m_directories + m_files);
+					QVector<ListingEntry> entries;
+					entries.reserve(rawEntries.count());
 
-					navigation.prepend(entry);
-
-					if (isRoot)
+					if (path.isEmpty())
 					{
-						break;
+						url.setPath(QLatin1String("/"));
 					}
 
-					url = url.adjusted(QUrl::RemoveFilename);
+					while (true)
+					{
+						const bool isRoot(url.path() == QLatin1String("/"));
+
+						url = url.adjusted(QUrl::StripTrailingSlash);
+
+						NavigationEntry entry;
+						entry.name = (isRoot ? url.toString() : url.fileName() + QLatin1Char('/'));
+						entry.url = url.url();
+
+						navigation.prepend(entry);
+
+						if (isRoot)
+						{
+							break;
+						}
+
+						url = url.adjusted(QUrl::RemoveFilename);
+					}
+
+					for (int i = 0; i < rawEntries.count(); ++i)
+					{
+						const QUrlInfo rawEntry(rawEntries.at(i));
+						ListingEntry entry;
+						entry.name = rawEntry.name();
+						entry.url = normalizedUrl.url() + QLatin1Char('/') + rawEntry.name();
+						entry.timeModified = rawEntry.lastModified();
+						entry.size = rawEntry.size();
+						entry.isSymlink = rawEntry.isSymLink();
+
+						if (rawEntry.isSymLink())
+						{
+							entry.type = ListingEntry::UnknownType;
+							entry.mimeType = mimeDatabase.mimeTypeForName(QLatin1String("text/uri-list"));
+						}
+						else if (rawEntry.isDir())
+						{
+							entry.type = ListingEntry::DirectoryType;
+							entry.mimeType = mimeDatabase.mimeTypeForName(QLatin1String("inode/directory"));
+						}
+						else
+						{
+							entry.type = ListingEntry::FileType;
+							entry.mimeType = mimeDatabase.mimeTypeForUrl(normalizedUrl.url() + rawEntry.name());
+						}
+
+						entries.append(entry);
+					}
+
+					QString title(normalizedUrl.toString());
+
+					if (!normalizedUrl.path().endsWith(QLatin1Char('/')))
+					{
+						title.append(QLatin1Char('/'));
+					}
+
+					m_content = createListing(title, navigation, entries);
+
+					sendHeaders();
+
+					m_ftp->close();
 				}
-
-				for (int i = 0; i < rawEntries.count(); ++i)
-				{
-					ListingEntry entry;
-					entry.name = rawEntries.at(i).name();
-					entry.url = Utils::normalizeUrl(request().url()).url() + QLatin1Char('/') + rawEntries.at(i).name();
-					entry.timeModified = rawEntries.at(i).lastModified();
-					entry.type = (rawEntries.at(i).isSymLink() ? ListingEntry::UnknownType : (rawEntries.at(i).isDir() ? ListingEntry::DirectoryType : ListingEntry::FileType));
-					entry.size = rawEntries.at(i).size();
-					entry.isSymlink = rawEntries.at(i).isSymLink();
-
-					if (rawEntries.at(i).isSymLink())
-					{
-						entry.mimeType = mimeDatabase.mimeTypeForName(QLatin1String("text/uri-list"));
-					}
-					else if (rawEntries.at(i).isDir())
-					{
-						entry.mimeType = mimeDatabase.mimeTypeForName(QLatin1String("inode/directory"));
-					}
-					else
-					{
-						entry.mimeType = mimeDatabase.mimeTypeForUrl(request().url().url() + rawEntries.at(i).name());
-					}
-
-					entries.append(entry);
-				}
-
-				m_content = createListing(request().url().toString() + (request().url().path().endsWith(QLatin1Char('/')) ? QChar() : QLatin1Char('/')), navigation, entries);
-
-				setHeader(QNetworkRequest::ContentTypeHeader, QVariant(QLatin1String("text/html; charset=UTF-8")));
-				setHeader(QNetworkRequest::ContentLengthHeader, QVariant(m_content.size()));
-
-				emit readyRead();
-				emit finished();
-
-				m_ftp->close();
 			}
 
 			break;
 		case QFtp::Get:
 			open(QIODevice::ReadOnly | QIODevice::Unbuffered);
-			setHeader(QNetworkRequest::ContentLengthHeader, QVariant(m_content.size()));
-
-			emit readyRead();
-			emit finished();
+			sendHeaders(false);
 
 			m_ftp->close();
 
@@ -195,33 +223,23 @@ void QtWebKitFtpListingNetworkReply::processCommand(int command, bool isError)
 	}
 }
 
-void QtWebKitFtpListingNetworkReply::addEntry(const QUrlInfo &entry)
-{
-	if (entry.isSymLink())
-	{
-		m_symlinks.append(entry);
-	}
-	else if (entry.isDir())
-	{
-		m_directories.append(entry);
-	}
-	else
-	{
-		m_files.append(entry);
-	}
-}
-
-void QtWebKitFtpListingNetworkReply::processData()
-{
-	m_content += m_ftp->readAll();
-
-	emit readyRead();
-}
-
 void QtWebKitFtpListingNetworkReply::abort()
 {
 	m_ftp->close();
 
+	emit finished();
+}
+
+void QtWebKitFtpListingNetworkReply::sendHeaders(bool isHtml)
+{
+	if (isHtml)
+	{
+		setHeader(QNetworkRequest::ContentTypeHeader, QVariant(QLatin1String("text/html; charset=UTF-8")));
+	}
+
+	setHeader(QNetworkRequest::ContentLengthHeader, QVariant(m_content.size()));
+
+	emit readyRead();
 	emit finished();
 }
 
@@ -234,13 +252,13 @@ qint64 QtWebKitFtpListingNetworkReply::readData(char *data, qint64 maxSize)
 {
 	if (m_offset < m_content.size())
 	{
-		const qint64 number(qMin(maxSize, (m_content.size() - m_offset)));
+		const qint64 size(qMin(maxSize, (m_content.size() - m_offset)));
 
-		memcpy(data, (m_content.constData() + m_offset), static_cast<size_t>(number));
+		memcpy(data, (m_content.constData() + m_offset), static_cast<size_t>(size));
 
-		m_offset += number;
+		m_offset += size;
 
-		return number;
+		return size;
 	}
 
 	return -1;

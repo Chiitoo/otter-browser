@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2017 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2017 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -101,7 +101,7 @@ int EntryItemDelegate::calculateDecorationWidth(QStyleOptionViewItem *option, co
 {
 	if (m_decorationSize < 0)
 	{
-		QStyleOptionViewItem mutableOption(*(option));
+		QStyleOptionViewItem mutableOption(*option);
 
 		ItemDelegate::initStyleOption(&mutableOption, index);
 
@@ -117,7 +117,7 @@ int EntryItemDelegate::calculateDecorationWidth(QStyleOptionViewItem *option, co
 	return m_decorationSize;
 }
 
-WindowsContentsWidget::WindowsContentsWidget(const QVariantMap &parameters, Window *window, QWidget *parent) : ContentsWidget(parameters, window, parent),
+WindowsContentsWidget::WindowsContentsWidget(const QVariantMap &parameters, Window *window, QWidget *parent) : SpecialPageContentsWidget(QLatin1String("windows"), parameters, window, parent),
 	m_ui(new Ui::WindowsContentsWidget)
 {
 	m_ui->setupUi(this);
@@ -221,6 +221,10 @@ void WindowsContentsWidget::showContextMenu(const QPoint &position)
 
 	if (!index.data(SessionModel::IsTrashedRole).toBool())
 	{
+		int closeAction(ActionsManager::CloseTabAction);
+
+		executor = ActionExecutor::Object();
+
 		switch (static_cast<SessionModel::EntityType>(index.data(SessionModel::TypeRole).toInt()))
 		{
 			case SessionModel::MainWindowEntity:
@@ -230,12 +234,7 @@ void WindowsContentsWidget::showContextMenu(const QPoint &position)
 					if (mainWindowItem)
 					{
 						executor = ActionExecutor::Object(mainWindowItem->getMainWindow(), mainWindowItem->getMainWindow());
-
-						menu.addSeparator();
-						menu.addAction(new Action(ActionsManager::NewTabAction, {}, executor, &menu));
-						menu.addAction(new Action(ActionsManager::NewTabPrivateAction, {}, executor, &menu));
-						menu.addSeparator();
-						menu.addAction(new Action(ActionsManager::CloseWindowAction, {}, executor, &menu));
+						closeAction = ActionsManager::CloseWindowAction;
 					}
 				}
 
@@ -246,12 +245,9 @@ void WindowsContentsWidget::showContextMenu(const QPoint &position)
 
 					if (windowItem)
 					{
-						executor = ActionExecutor::Object(windowItem->getActiveWindow()->getMainWindow(), windowItem->getActiveWindow()->getMainWindow());
+						Window *window(windowItem->getActiveWindow());
 
-						menu.addAction(new Action(ActionsManager::NewTabAction, {}, executor, &menu));
-						menu.addAction(new Action(ActionsManager::NewTabPrivateAction, {}, executor, &menu));
-						menu.addSeparator();
-						menu.addAction(new Action(ActionsManager::CloseTabAction, {}, ActionExecutor::Object(windowItem->getActiveWindow(), windowItem->getActiveWindow()), &menu));
+						executor = ActionExecutor::Object(window->getMainWindow(), window->getMainWindow());
 					}
 				}
 
@@ -259,29 +255,18 @@ void WindowsContentsWidget::showContextMenu(const QPoint &position)
 			default:
 				break;
 		}
+
+		if (executor.isValid())
+		{
+			menu.addAction(new Action(ActionsManager::NewTabAction, {}, executor, &menu));
+			menu.addAction(new Action(ActionsManager::NewTabPrivateAction, {}, executor, &menu));
+			menu.addSeparator();
+			menu.addAction(new Action(closeAction, {}, executor, &menu));
+		}
 	}
 
 	menu.exec(m_ui->windowsViewWidget->mapToGlobal(position));
 }
 
-QString WindowsContentsWidget::getTitle() const
-{
-	return tr("Windows and Tabs");
-}
-
-QLatin1String WindowsContentsWidget::getType() const
-{
-	return QLatin1String("windows");
-}
-
-QUrl WindowsContentsWidget::getUrl() const
-{
-	return QUrl(QLatin1String("about:windows"));
-}
-
-QIcon WindowsContentsWidget::getIcon() const
-{
-	return ThemesManager::createIcon(QLatin1String("tab"), false);
-}
 
 }

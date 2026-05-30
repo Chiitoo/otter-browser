@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -19,6 +19,7 @@
 
 #include "HistoryContentsWidget.h"
 #include "../../../core/Application.h"
+#include "../../../core/HistoryManager.h"
 #include "../../../core/ThemesManager.h"
 #include "../../../core/Utils.h"
 #include "../../../ui/Action.h"
@@ -34,7 +35,7 @@
 namespace Otter
 {
 
-HistoryContentsWidget::HistoryContentsWidget(const QVariantMap &parameters, Window *window, QWidget *parent) : ContentsWidget(parameters, window, parent),
+HistoryContentsWidget::HistoryContentsWidget(const QVariantMap &parameters, Window *window, QWidget *parent) : SpecialPageContentsWidget(QLatin1String("history"), parameters, window, parent),
 	m_model(new QStandardItemModel(this)),
 	m_isLoading(true),
 	m_ui(new Ui::HistoryContentsWidget)
@@ -45,9 +46,9 @@ HistoryContentsWidget::HistoryContentsWidget(const QVariantMap &parameters, Wind
 	const QStringList groups({tr("Today"), tr("Yesterday"), tr("Earlier This Week"), tr("Previous Week"), tr("Earlier This Month"), tr("Earlier This Year"), tr("Older")});
 	const QIcon icon(ThemesManager::createIcon(QLatin1String("inode-directory")));
 
-	for (int i = 0; i < groups.count(); ++i)
+	for (const QString &group: groups)
 	{
-		m_model->appendRow(new QStandardItem(icon, groups.at(i)));
+		m_model->appendRow(new QStandardItem(icon, group));
 	}
 
 	m_model->setHorizontalHeaderLabels({tr("Address"), tr("Title"), tr("Date")});
@@ -92,10 +93,11 @@ void HistoryContentsWidget::changeEvent(QEvent *event)
 		m_ui->retranslateUi(this);
 
 		const QStringList groups({tr("Today"), tr("Yesterday"), tr("Earlier This Week"), tr("Previous Week"), tr("Earlier This Month"), tr("Earlier This Year"), tr("Older")});
+		int index(-1);
 
-		for (int i = 0; i < groups.count(); ++i)
+		for (const QString &group: groups)
 		{
-			m_model->setData(m_model->index(i, 0), groups.at(i), Qt::DisplayRole);
+			m_model->setData(m_model->index(++index, 0), group, Qt::DisplayRole);
 		}
 
 		m_model->setHorizontalHeaderLabels({tr("Address"), tr("Title"), tr("Date")});
@@ -284,7 +286,7 @@ void HistoryContentsWidget::handleEntryAdded(HistoryModel::Entry *entry)
 
 	m_ui->historyViewWidget->setRowHidden(groupItem->row(), groupItem->index().parent(), false);
 
-	if (!sender() || groupItem->rowCount() != 1 || SettingsManager::getOption(SettingsManager::History_ExpandBranchesOption).toString() != QLatin1String("first"))
+	if (m_isLoading || groupItem->rowCount() != 1 || SettingsManager::getOption(SettingsManager::History_ExpandBranchesOption).toString() != QLatin1String("first"))
 	{
 		return;
 	}
@@ -414,26 +416,6 @@ QStandardItem* HistoryContentsWidget::findEntry(quint64 identifier)
 	}
 
 	return nullptr;
-}
-
-QString HistoryContentsWidget::getTitle() const
-{
-	return tr("History");
-}
-
-QLatin1String HistoryContentsWidget::getType() const
-{
-	return QLatin1String("history");
-}
-
-QUrl HistoryContentsWidget::getUrl() const
-{
-	return QUrl(QLatin1String("about:history"));
-}
-
-QIcon HistoryContentsWidget::getIcon() const
-{
-	return ThemesManager::createIcon(QLatin1String("view-history"), false);
 }
 
 WebWidget::LoadingState HistoryContentsWidget::getLoadingState() const

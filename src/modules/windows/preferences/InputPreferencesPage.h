@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 - 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
 * Copyright (C) 2016 - 2017 Piotr Wójcik <chocimier@tlen.pl>
 *
@@ -133,7 +133,7 @@ protected:
 
 	void changeEvent(QEvent *event) override;
 	void loadKeyboardDefinitions(const QString &identifier);
-	void addKeyboardShortcuts(QStandardItemModel *model, int identifier, const QString &name, const QString &text, const QIcon &icon, const QVariantMap &rawParameters, const QVector<QKeySequence> &shortcuts, bool areShortcutsDisabled);
+	void addKeyboardShortcuts(int identifier, const QString &name, const QString &text, const QIcon &icon, const QVariantMap &rawParameters, const QVector<QKeySequence> &shortcuts, bool areShortcutsDisabled);
 	void addKeyboardShortcut(bool isDisabled);
 	QString createProfileIdentifier(QStandardItemModel *model, const QString &base = {}) const;
 	QHash<int, QVector<KeyboardProfile::Action> > getKeyboardDefinitions() const;

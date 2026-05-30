@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2015 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -97,38 +97,21 @@ void MenuBarWidget::contextMenuEvent(QContextMenuEvent *event)
 void MenuBarWidget::reload()
 {
 	const ToolBarsManager::ToolBarDefinition definition(ToolBarsManager::getToolBarDefinition(ToolBarsManager::MenuBar));
-	QStringList actions;
-	actions.reserve(definition.entries.count());
+	int menuBarPosition(-1);
 
 	for (int i = 0; i < definition.entries.count(); ++i)
 	{
-		actions.append(definition.entries.at(i).action);
+		if (definition.entries.at(i).action == QLatin1String("MenuBarWidget"))
+		{
+			menuBarPosition = i;
+
+			break;
+		}
 	}
 
-	if (actions.count() == 1 && actions.at(0) == QLatin1String("MenuBarWidget"))
-	{
-		if (m_leftToolBar)
-		{
-			m_leftToolBar->deleteLater();
-			m_leftToolBar = nullptr;
-
-			setCornerWidget(nullptr, Qt::TopLeftCorner);
-		}
-
-		if (m_rightToolBar)
-		{
-			m_rightToolBar->deleteLater();
-			m_rightToolBar = nullptr;
-
-			setCornerWidget(nullptr, Qt::TopRightCorner);
-		}
-
-		return;
-	}
-
-	const int position(actions.indexOf(QLatin1String("MenuBarWidget")));
-	const bool needsLeftToolbar(position != 0);
-	const bool needsRightToolbar(position != (definition.entries.count() - 1));
+	const bool isMenuBarOnly(menuBarPosition == 0 && definition.entries.count() == 1);
+	const bool needsLeftToolbar(!isMenuBarOnly && menuBarPosition != 0);
+	const bool needsRightToolbar(!isMenuBarOnly && menuBarPosition != (definition.entries.count() - 1));
 
 	if (needsLeftToolbar && !m_leftToolBar)
 	{
@@ -158,6 +141,14 @@ void MenuBarWidget::reload()
 		setCornerWidget(nullptr, Qt::TopRightCorner);
 	}
 
+	if (isMenuBarOnly)
+	{
+		setMaximumHeight(QWIDGETSIZE_MAX);
+		setMinimumHeight(0);
+
+		return;
+	}
+
 	ToolBarsManager::ToolBarDefinition leftDefinition(definition);
 	leftDefinition.entries.clear();
 
@@ -166,59 +157,58 @@ void MenuBarWidget::reload()
 
 	for (int i = 0; i < definition.entries.count(); ++i)
 	{
-		if (i != position)
+		if (i != menuBarPosition)
 		{
-			if (i < position)
+			const ToolBarsManager::ToolBarDefinition::Entry entry(definition.entries.at(i));
+
+			if (i < menuBarPosition)
 			{
-				leftDefinition.entries.append(definition.entries.at(i));
+				leftDefinition.entries.append(entry);
 			}
 			else
 			{
-				rightDefinition.entries.append(definition.entries.at(i));
+				rightDefinition.entries.append(entry);
 			}
 		}
 	}
 
 	const int menuBarHeight(actionGeometry(this->actions().at(0)).height());
+	int toolBarHeight(0);
 
-	if (m_leftToolBar || m_rightToolBar)
+	if (m_leftToolBar)
 	{
-		const int toolBarHeight((m_leftToolBar ? m_leftToolBar->getIconSize() : m_rightToolBar->getIconSize()) + 12);
+		m_leftToolBar->setDefinition(leftDefinition);
 
-		if (m_leftToolBar)
-		{
-			m_leftToolBar->setDefinition(leftDefinition);
-		}
-
-		if (m_rightToolBar)
-		{
-			m_rightToolBar->setDefinition(rightDefinition);
-		}
-
-		setFixedHeight((toolBarHeight > menuBarHeight) ? toolBarHeight : menuBarHeight);
+		toolBarHeight = (m_leftToolBar->getIconSize() + 12);
 	}
-	else
+
+	if (m_rightToolBar)
 	{
-		setFixedHeight(menuBarHeight);
+		m_rightToolBar->setDefinition(rightDefinition);
+
+		toolBarHeight = (m_rightToolBar->getIconSize() + 12);
 	}
+
+	setFixedHeight((toolBarHeight > menuBarHeight) ? toolBarHeight : menuBarHeight);
 
 	QTimer::singleShot(100, this, &MenuBarWidget::updateGeometries);
 }
 
 void MenuBarWidget::updateGeometries()
 {
-	if (!m_leftToolBar && !m_rightToolBar)
+	if (!m_rightToolBar)
 	{
 		return;
 	}
 
+	const int actionsCount(actions().count());
 	int size(0);
 
-	if (actions().count() > 0)
+	if (actionsCount > 0)
 	{
-		size = ((style()->pixelMetric(QStyle::PM_MenuBarHMargin, nullptr, this) * 2) + (style()->pixelMetric(QStyle::PM_MenuBarItemSpacing, nullptr, this) * actions().count()));
+		size = ((style()->pixelMetric(QStyle::PM_MenuBarHMargin, nullptr, this) * 2) + (style()->pixelMetric(QStyle::PM_MenuBarItemSpacing, nullptr, this) * actionsCount));
 
-		for (int i = 0; i < actions().count(); ++i)
+		for (int i = 0; i < actionsCount; ++i)
 		{
 			QStyleOptionMenuItem option;
 
@@ -228,12 +218,12 @@ void MenuBarWidget::updateGeometries()
 		}
 	}
 
-	if (m_rightToolBar && width() > (size + (m_leftToolBar ? m_leftToolBar->sizeHint().width() : 0) + m_rightToolBar->sizeHint().width()))
+	if (width() > (size + (m_leftToolBar ? m_leftToolBar->sizeHint().width() : 0) + m_rightToolBar->sizeHint().width()))
 	{
 		const int offset(size - (m_leftToolBar ? m_leftToolBar->sizeHint().width() : 0));
-		ToolBarWidget *toolBar(qobject_cast<ToolBarWidget*>(m_rightToolBar));
-		toolBar->move(offset, 0);
-		toolBar->resize((width() - offset), toolBar->height());
+
+		m_rightToolBar->move(offset, 0);
+		m_rightToolBar->resize((width() - offset), m_rightToolBar->height());
 	}
 }
 

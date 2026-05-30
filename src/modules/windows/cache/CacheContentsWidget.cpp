@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -37,7 +37,7 @@
 namespace Otter
 {
 
-CacheContentsWidget::CacheContentsWidget(const QVariantMap &parameters, Window *window, QWidget *parent) : ContentsWidget(parameters, window, parent),
+CacheContentsWidget::CacheContentsWidget(const QVariantMap &parameters, Window *window, QWidget *parent) : SpecialPageContentsWidget(QLatin1String("cache"), parameters, window, parent),
 	m_model(new QStandardItemModel(this)),
 	m_isLoading(true),
 	m_ui(new Ui::CacheContentsWidget)
@@ -119,9 +119,9 @@ void CacheContentsWidget::populateCache()
 	const NetworkCache *cache(NetworkManagerFactory::getCache());
 	const QVector<QUrl> entries(cache->getEntries());
 
-	for (int i = 0; i < entries.count(); ++i)
+	for (const QUrl &entry: entries)
 	{
-		handleEntryAdded(entries.at(i));
+		handleEntryAdded(entry);
 	}
 
 	m_model->sort(0);
@@ -233,7 +233,7 @@ void CacheContentsWidget::handleEntryAdded(const QUrl &url)
 		m_model->appendRow(domainItem);
 		m_model->setItem(domainItem->row(), 2, new QStandardItem());
 
-		if (sender())
+		if (!m_isLoading)
 		{
 			m_model->sort(0);
 		}
@@ -245,11 +245,11 @@ void CacheContentsWidget::handleEntryAdded(const QUrl &url)
 	const QList<QPair<QByteArray, QByteArray> > headers(metaData.rawHeaders());
 	QString type;
 
-	for (int i = 0; i < headers.count(); ++i)
+	for (const QPair<QByteArray, QByteArray> &header: headers)
 	{
-		if (headers.at(i).first == QByteArrayLiteral("Content-Type"))
+		if (header.first == QByteArrayLiteral("Content-Type"))
 		{
-			type = QString::fromLatin1(headers.at(i).second);
+			type = QString::fromLatin1(header.second);
 
 			break;
 		}
@@ -279,9 +279,9 @@ void CacheContentsWidget::handleEntryAdded(const QUrl &url)
 	}
 
 	domainItem->appendRow(entryItems);
-	domainItem->setText(QStringLiteral("%1 (%2)").arg(domain).arg(domainItem->rowCount()));
+	domainItem->setText(QStringLiteral("%1 (%2)").arg(domain, QString::number(domainItem->rowCount())));
 
-	if (sender())
+	if (!m_isLoading)
 	{
 		domainItem->sortChildren(0, Qt::DescendingOrder);
 	}
@@ -323,7 +323,7 @@ void CacheContentsWidget::handleEntryRemoved(const QUrl &url)
 				domainSizeItem->setText(Utils::formatUnit(domainSizeItem->data(SizeRole).toLongLong()));
 			}
 
-			domainItem->setText(QStringLiteral("%1 (%2)").arg(url.host()).arg(domainItem->rowCount()));
+			domainItem->setText(QStringLiteral("%1 (%2)").arg(url.host(), QString::number(domainItem->rowCount())));
 		}
 
 		break;
@@ -422,11 +422,11 @@ void CacheContentsWidget::updateActions()
 	{
 		const QList<QPair<QByteArray, QByteArray> > headers(metaData.rawHeaders());
 
-		for (int i = 0; i < headers.count(); ++i)
+		for (const QPair<QByteArray, QByteArray> &header: headers)
 		{
-			if (headers.at(i).first == QByteArrayLiteral("Content-Type"))
+			if (header.first == QByteArrayLiteral("Content-Type"))
 			{
-				mimeType = mimeDatabase.mimeTypeForName(QString::fromLatin1(headers.at(i).second));
+				mimeType = mimeDatabase.mimeTypeForName(QString::fromLatin1(header.second));
 
 				break;
 			}
@@ -534,26 +534,6 @@ QStandardItem* CacheContentsWidget::findDomainItem(const QString &domain)
 	}
 
 	return nullptr;
-}
-
-QString CacheContentsWidget::getTitle() const
-{
-	return tr("Cache");
-}
-
-QLatin1String CacheContentsWidget::getType() const
-{
-	return QLatin1String("cache");
-}
-
-QUrl CacheContentsWidget::getUrl() const
-{
-	return QUrl(QLatin1String("about:cache"));
-}
-
-QIcon CacheContentsWidget::getIcon() const
-{
-	return ThemesManager::createIcon(QLatin1String("cache"), false);
 }
 
 QUrl CacheContentsWidget::getEntry(const QModelIndex &index) const

@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2015 Piotr Wójcik <chocimier@tlen.pl>
 * Copyright (C) 2015 Jan Bajer aka bajasoft <jbajer@gmail.com>
 * Copyright (C) 2017 Piktas Zuikis <piktas.zuikis@inbox.lt>
@@ -67,8 +67,9 @@ public:
 		RemoteContentState = 4,
 		SecureContentState = 8,
 		TrustedContentState = 16,
-		MixedContentState = 32,
-		FraudContentState = 64
+		AmbiguousContentState = 32,
+		MixedContentState = 64,
+		FraudContentState = 128
 	};
 
 	Q_DECLARE_FLAGS(ContentStates, ContentState)
@@ -162,7 +163,7 @@ public:
 			IsFormTest = 4,
 			IsLinkFromSelectionTest = 8,
 			IsSelectedTest = 16,
-			IsSpellCheckEnabled = 32,
+			IsSpellCheckEnabledTest = 32,
 			MediaHasControlsTest = 64,
 			MediaIsLoopedTest = 128,
 			MediaIsMutedTest = 256,
@@ -224,14 +225,12 @@ public:
 	virtual QString getCharacterEncoding() const;
 	virtual QString getMisspelledWord() const;
 	virtual QString getSelectedText() const;
-	QString getStatusMessage() const;
 	QVariant getOption(int identifier, const QUrl &url = {}) const;
 	virtual QVariant getPageInformation(PageInformation key) const;
 	virtual QUrl getUrl() const = 0;
 	QUrl getRequestedUrl() const;
 	virtual QIcon getIcon() const = 0;
 	virtual QPixmap createThumbnail(const QSize &size = {});
-	QPoint getClickPosition() const;
 	virtual QPoint getScrollPosition() const = 0;
 	virtual QRect getGeometry(bool excludeScrollBars = false) const;
 	ActionsManager::ActionDefinition::State getActionState(int identifier, const QVariantMap &parameters = {}) const override;
@@ -241,10 +240,9 @@ public:
 	virtual LinkUrl getActiveMedia() const;
 	virtual SslInformation getSslInformation() const;
 	virtual Session::Window::History getHistory() const = 0;
-	virtual HitTestResult getHitTestResult(const QPoint &position);
 	virtual QStringList getSpellCheckerSuggestions() const;
 	virtual QStringList getStyleSheets() const;
-	virtual QVector<SpellCheckManager::DictionaryInformation> getDictionaries() const;
+	virtual QVector<SpellCheckManager::Dictionary> getDictionaries() const;
 	virtual QVector<LinkUrl> getFeeds() const;
 	virtual QVector<LinkUrl> getLinks() const;
 	virtual QVector<LinkUrl> getSearchEngines() const;
@@ -254,22 +252,18 @@ public:
 	virtual QMultiMap<QString, QString> getMetaData() const;
 	virtual ContentStates getContentState() const;
 	virtual LoadingState getLoadingState() const = 0;
-	quint64 getWindowIdentifier() const;
-	virtual quint64 getGlobalHistoryEntryIdentifier(int index) const;
 	virtual int getZoom() const = 0;
-	bool hasOption(int identifier) const;
 	virtual bool hasSelection() const;
 	virtual bool hasWatchedChanges(ChangeWatcher watcher) const;
 	virtual bool isAudible() const;
 	virtual bool isAudioMuted() const;
 	virtual bool isFullScreen() const;
 	virtual bool isPrivate() const = 0;
-	bool isWatchingChanges(ChangeWatcher watcher) const;
 
 public slots:
 	void triggerAction(int identifier, const QVariantMap &parameters = {}, ActionsManager::TriggerType trigger = ActionsManager::UnknownTrigger) override;
 	virtual void clearOptions();
-	virtual void fillPassword(const PasswordsManager::PasswordInformation &password);
+	virtual void fillPassword(const PasswordsManager::Password &password);
 	virtual void findInPage(const QString &text, FindFlags flags = NoFlagsFind) = 0;
 	virtual void replaceMisspelledWord(const QString &replacement);
 	virtual void showContextMenu(const QPoint &position = {});
@@ -283,7 +277,7 @@ public slots:
 	void setRequestedUrl(const QUrl &url, bool isTypedIn = true, bool updateOnly = false);
 
 protected:
-	explicit WebWidget(const QVariantMap &parameters, WebBackend *backend, ContentsWidget *parent = nullptr);
+	explicit WebWidget(WebBackend *backend, ContentsWidget *parent = nullptr);
 
 	void timerEvent(QTimerEvent *event) override;
 	void openUrl(const QUrl &url, SessionsManager::OpenHints hints);
@@ -298,10 +292,16 @@ protected:
 	QString getSavePath(const QVector<SaveFormat> &allowedFormats, SaveFormat *selectedFormat) const;
 	QString getOpenActionText(SessionsManager::OpenHints hints) const;
 	static QString getFastForwardScript(bool isSelectingTheBestLink);
+	QString getStatusMessage() const;
 	QUrl extractUrl(const QVariantMap &parameters) const;
 	HitTestResult getCurrentHitTestResult() const;
+	virtual HitTestResult getHitTestResult(const QPoint &position);
+	QPoint getClickPosition() const;
+	static QSize getDefaultThumbnailSize();
 	PermissionPolicy getPermission(FeaturePermission feature, const QUrl &url) const;
 	static SessionsManager::OpenHints mapOpenActionToOpenHints(int identifier);
+	quint64 getWindowIdentifier() const;
+	virtual quint64 getGlobalHistoryEntryIdentifier(int index) const;
 	virtual int getAmountOfDeferredPlugins() const;
 	virtual bool canGoBack() const;
 	virtual bool canGoForward() const;
@@ -312,9 +312,11 @@ protected:
 	virtual bool canUndo() const;
 	virtual bool canShowContextMenu(const QPoint &position) const;
 	virtual bool canViewSource() const;
+	bool hasOption(int identifier) const;
 	virtual bool isInspecting() const;
 	virtual bool isPopup() const;
 	virtual bool isScrollBar(const QPoint &position) const;
+	bool isWatchingChanges(ChangeWatcher watcher) const;
 
 protected slots:
 	void handleWindowCloseRequest();
@@ -354,7 +356,7 @@ signals:
 	void requestedNewWindow(WebWidget *widget, SessionsManager::OpenHints hints, const QVariantMap &parameters);
 	void requestedPopupWindow(const QUrl &parentUrl, const QUrl &popupUrl);
 	void requestedPermission(FeaturePermission feature, const QUrl &url, bool isCancellation);
-	void requestedSavePassword(const PasswordsManager::PasswordInformation &password, bool isUpdate);
+	void requestedSavePassword(const PasswordsManager::Password &password, bool isUpdate);
 	void requestedGeometryChange(const QRect &geometry);
 	void requestedInspectorVisibilityChange(bool isVisible);
 	void geometryChanged();

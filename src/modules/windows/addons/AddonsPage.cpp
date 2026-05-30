@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2022 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2022 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -167,11 +167,13 @@ void AddonsPage::updateAddonEntry(Addon *addon)
 
 		if (index.data(IdentifierRole) == identifier)
 		{
+			const QModelIndex siblingIndex(index.sibling(i, 1));
+
 			m_ui->addonsViewWidget->setData(index, getAddonIcon(addon), Qt::DecorationRole);
 			m_ui->addonsViewWidget->setData(index, addon->getTitle(), Qt::DisplayRole);
 			m_ui->addonsViewWidget->setData(index, addon->getDescription(), Qt::ToolTipRole);
-			m_ui->addonsViewWidget->setData(index.sibling(i, 1), addon->getVersion(), Qt::DisplayRole);
-			m_ui->addonsViewWidget->setData(index.sibling(i, 1), getAddonToolTip(addon), Qt::ToolTipRole);
+			m_ui->addonsViewWidget->setData(siblingIndex, addon->getVersion(), Qt::DisplayRole);
+			m_ui->addonsViewWidget->setData(siblingIndex, getAddonToolTip(addon), Qt::ToolTipRole);
 
 			return;
 		}
@@ -202,14 +204,15 @@ void AddonsPage::load()
 	updateModelColumns();
 
 	const QVector<ModelColumn> columns(getModelColumns());
+	int index(-1);
 
-	for (int i = 0; i < columns.count(); ++i)
+	for (const ModelColumn &column: columns)
 	{
-		const int width(columns.at(i).width);
+		const int width(column.width);
 
 		if (width > 0)
 		{
-			getModel()->setHeaderData(i, Qt::Horizontal, width, HeaderViewWidget::WidthRole);
+			getModel()->setHeaderData(++index, Qt::Horizontal, width, HeaderViewWidget::WidthRole);
 		}
 	}
 
@@ -231,9 +234,9 @@ void AddonsPage::updateModelColumns()
 	QStringList labels;
 	labels.reserve(columns.count());
 
-	for (int i = 0; i < columns.count(); ++i)
+	for (const ModelColumn &column: columns)
 	{
-		labels.append(columns.at(i).label);
+		labels.append(column.label);
 	}
 
 	m_model->setHorizontalHeaderLabels(labels);
@@ -244,7 +247,7 @@ void AddonsPage::showContextMenu(const QPoint &position)
 	QMenu menu(this);
 	menu.addAction(tr("Add Addon…"), this, &AddonsPage::addAddon);
 
-	if (m_ui->addonsViewWidget->selectionModel()->hasSelection())
+	if (m_ui->addonsViewWidget->hasSelection())
 	{
 		menu.addSeparator();
 		menu.addAction(tr("Open Addon File"), this, &AddonsPage::openAddons)->setEnabled(canOpenAddons());
@@ -260,11 +263,14 @@ void AddonsPage::setDetails(const QVector<AddonsPage::DetailsEntry> &details)
 {
 	if (m_ui->formLayout->rowCount() > 0)
 	{
-		for (int i = 0; i < details.count(); ++i)
+		int index(0);
+
+		for (const DetailsEntry &entry: details)
 		{
-			const DetailsEntry entry(details.at(i));
-			QLayoutItem *labelItem(m_ui->formLayout->itemAt(i, QFormLayout::LabelRole));
-			QLayoutItem *fieldItem(m_ui->formLayout->itemAt(i, QFormLayout::FieldRole));
+			QLayoutItem *labelItem(m_ui->formLayout->itemAt(index, QFormLayout::LabelRole));
+			QLayoutItem *fieldItem(m_ui->formLayout->itemAt(index, QFormLayout::FieldRole));
+
+			++index;
 
 			if (!labelItem || !fieldItem)
 			{
@@ -291,9 +297,8 @@ void AddonsPage::setDetails(const QVector<AddonsPage::DetailsEntry> &details)
 	}
 	else
 	{
-		for (int i = 0; i < details.count(); ++i)
+		for (const DetailsEntry &entry: details)
 		{
-			const DetailsEntry entry(details.at(i));
 			TextLabelWidget *textWidget(new TextLabelWidget(m_ui->detailsWidget));
 			textWidget->setText(entry.value);
 

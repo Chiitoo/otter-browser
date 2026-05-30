@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2016 - 2019 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2016 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2016 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -21,7 +21,6 @@
 #ifndef OTTER_CONTENTBLOCKINGINFORMATIONWIDGET_H
 #define OTTER_CONTENTBLOCKINGINFORMATIONWIDGET_H
 
-#include "../../../core/NetworkManager.h"
 #include "../../../ui/ToolButtonWidget.h"
 
 namespace Otter
@@ -51,7 +50,7 @@ protected slots:
 	void toggleOption(QAction *action);
 	void populateElementsMenu();
 	void populateProfilesMenu();
-	void handleRequest();
+	void handleBlockedRequest();
 	void setWindow(Window *window);
 
 private:
@@ -59,7 +58,7 @@ private:
 	QMenu *m_elementsMenu;
 	QMenu *m_profilesMenu;
 	QIcon m_icon;
-	int m_amount;
+	int m_requestsAmount;
 	bool m_isContentBlockingEnabled;
 };
 

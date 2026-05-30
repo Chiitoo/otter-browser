@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2015 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -82,6 +82,34 @@ private:
 	bool m_isEnabled;
 
 friend class AddonsManager;
+};
+
+class JsonAddon : public Addon
+{
+public:
+	explicit JsonAddon();
+
+	void setTitle(const QString &title);
+	void setDescription(const QString &description);
+	void setAuthor(const QString &author);
+	void setVersion(const QString &version);
+	void setMetaData(const MetaData &metaData);
+	void setModified(bool isModified);
+	QString getTitle() const override;
+	QString getDescription() const override;
+	QString getAuthor() const;
+	QString getVersion() const override;
+	QUrl getHomePage() const override;
+	MetaData getMetaData() const;
+	bool isModified() const;
+
+protected:
+	void loadMetaData(const QString &path);
+	QString formatComment(const QString &type);
+
+private:
+	MetaData m_metaData;
+	bool m_isModified;
 };
 
 class AddonsManager final : public QObject

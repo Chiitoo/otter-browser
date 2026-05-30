@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2017 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2017 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -42,24 +42,25 @@ void ActionExecutor::Object::connectSignals(const QObject *receiver, const QMeta
 		return;
 	}
 
-	const QMetaObject *metaObject(m_object.data()->metaObject());
-	const QMetaMethod actionsStateChangedSignal(metaObject->method(metaObject->indexOfSignal("actionsStateChanged()")));
-	const QMetaMethod arbitraryActionsStateChangedSignal(metaObject->method(metaObject->indexOfSignal("arbitraryActionsStateChanged(QVector<int>)")));
-	const QMetaMethod categorizedActionsStateChangedSignal(metaObject->method(metaObject->indexOfSignal("categorizedActionsStateChanged(QVector<int>)")));
+	QObject *sender(m_object.data());
+	const QMetaObject *metaObject(sender->metaObject());
+	const QMetaMethod actionsStateChangedSignal(getMethod(metaObject, "actionsStateChanged()"));
+	const QMetaMethod arbitraryActionsStateChangedSignal(getMethod(metaObject, "arbitraryActionsStateChanged(QVector<int>)"));
+	const QMetaMethod categorizedActionsStateChangedSignal(getMethod(metaObject, "categorizedActionsStateChanged(QVector<int>)"));
 
 	if (actionsStateChangedSignal.isValid() && actionsStateChangedMethod)
 	{
-		QObject::connect(m_object.data(), actionsStateChangedSignal, receiver, *(actionsStateChangedMethod));
+		QObject::connect(sender, actionsStateChangedSignal, receiver, *(actionsStateChangedMethod));
 	}
 
 	if (arbitraryActionsStateChangedMethod && arbitraryActionsStateChangedSignal.isValid())
 	{
-		QObject::connect(m_object.data(), arbitraryActionsStateChangedSignal, receiver, *(arbitraryActionsStateChangedMethod));
+		QObject::connect(sender, arbitraryActionsStateChangedSignal, receiver, *(arbitraryActionsStateChangedMethod));
 	}
 
 	if (categorizedActionsStateChangedMethod && categorizedActionsStateChangedSignal.isValid())
 	{
-		QObject::connect(m_object.data(), categorizedActionsStateChangedSignal, receiver, *(categorizedActionsStateChangedMethod));
+		QObject::connect(sender, categorizedActionsStateChangedSignal, receiver, *(categorizedActionsStateChangedMethod));
 	}
 }
 
@@ -70,24 +71,25 @@ void ActionExecutor::Object::disconnectSignals(const QObject *receiver, const QM
 		return;
 	}
 
-	const QMetaObject *metaObject(m_object.data()->metaObject());
-	const QMetaMethod actionsStateChangedSignal(metaObject->method(metaObject->indexOfSignal("actionsStateChanged()")));
-	const QMetaMethod arbitraryActionsStateChangedSignal(metaObject->method(metaObject->indexOfSignal("arbitraryActionsStateChanged(QVector<int>)")));
-	const QMetaMethod categorizedActionsStateChangedSignal(metaObject->method(metaObject->indexOfSignal("categorizedActionsStateChanged(QVector<int>)")));
+	QObject *sender(m_object.data());
+	const QMetaObject *metaObject(sender->metaObject());
+	const QMetaMethod actionsStateChangedSignal(getMethod(metaObject, "actionsStateChanged()"));
+	const QMetaMethod arbitraryActionsStateChangedSignal(getMethod(metaObject, "arbitraryActionsStateChanged(QVector<int>)"));
+	const QMetaMethod categorizedActionsStateChangedSignal(getMethod(metaObject, "categorizedActionsStateChanged(QVector<int>)"));
 
 	if (actionsStateChangedSignal.isValid() && actionsStateChangedMethod)
 	{
-		QObject::disconnect(m_object.data(), actionsStateChangedSignal, receiver, *(actionsStateChangedMethod));
+		QObject::disconnect(sender, actionsStateChangedSignal, receiver, *(actionsStateChangedMethod));
 	}
 
 	if (arbitraryActionsStateChangedMethod && arbitraryActionsStateChangedSignal.isValid())
 	{
-		QObject::disconnect(m_object.data(), arbitraryActionsStateChangedSignal, receiver, *(arbitraryActionsStateChangedMethod));
+		QObject::disconnect(sender, arbitraryActionsStateChangedSignal, receiver, *(arbitraryActionsStateChangedMethod));
 	}
 
 	if (categorizedActionsStateChangedMethod && categorizedActionsStateChangedSignal.isValid())
 	{
-		QObject::disconnect(m_object.data(), categorizedActionsStateChangedSignal, receiver, *(categorizedActionsStateChangedMethod));
+		QObject::disconnect(sender, categorizedActionsStateChangedSignal, receiver, *(categorizedActionsStateChangedMethod));
 	}
 }
 
@@ -126,6 +128,11 @@ ActionsManager::ActionDefinition::State ActionExecutor::Object::getActionState(i
 	state.isEnabled = false;
 
 	return state;
+}
+
+QMetaMethod ActionExecutor::Object::getMethod(const QMetaObject *metaObject, const char *method)
+{
+	return metaObject->method(metaObject->indexOfSignal(method));
 }
 
 bool ActionExecutor::Object::isValid() const

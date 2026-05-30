@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2015 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2016 Piotr Wójcik <chocimier@tlen.pl>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -177,20 +177,22 @@ void ToolBarWidget::paintEvent(QPaintEvent *event)
 
 	if (widget)
 	{
+		const QRect geometry(widget->geometry());
+
 		if (isHorizontal())
 		{
 			if (isLeftToRight())
 			{
-				position = (widget->geometry().left() - spacing);
+				position = (geometry.left() - spacing);
 			}
 			else
 			{
-				position = (widget->geometry().right() + spacing);
+				position = (geometry.right() + spacing);
 			}
 		}
 		else
 		{
-			position = (widget->geometry().top() - spacing);
+			position = (geometry.top() - spacing);
 		}
 	}
 	else if (m_dropIndex > 0)
@@ -243,7 +245,11 @@ void ToolBarWidget::resizeEvent(QResizeEvent *event)
 	}
 }
 
+#if QT_VERSION >= 0x060000
+void ToolBarWidget::enterEvent(QEnterEvent *event)
+#else
 void ToolBarWidget::enterEvent(QEvent *event)
+#endif
 {
 	QToolBar::enterEvent(event);
 
@@ -434,11 +440,13 @@ void ToolBarWidget::populateEntries()
 
 			for (int i = 0; i < definition.entries.count(); ++i)
 			{
-				if (definition.entries.at(i).action == QLatin1String("separator"))
+				const QString action(definition.entries.at(i).action);
+
+				if (action == QLatin1String("separator"))
 				{
 					addSeparator();
 				}
-				else if (definition.entries.at(i).action != QLatin1String("TabBarWidget"))
+				else if (action != QLatin1String("TabBarWidget"))
 				{
 					QWidget *widget(WidgetFactory::createToolBarItem(definition.entries.at(i), m_window, this));
 
@@ -449,11 +457,11 @@ void ToolBarWidget::populateEntries()
 
 					addWidget(widget);
 
-					if (definition.entries.at(i).action == QLatin1String("AddressWidget"))
+					if (action == QLatin1String("AddressWidget"))
 					{
 						m_addressFields.append(widget);
 					}
-					else if (definition.entries.at(i).action == QLatin1String("SearchWidget"))
+					else if (action == QLatin1String("SearchWidget"))
 					{
 						m_searchFields.append(widget);
 					}
@@ -526,15 +534,16 @@ void ToolBarWidget::updateDropIndex(const QPoint &position)
 
 				if (widget)
 				{
-					const int margin((isHorizontal ? widget->geometry().width() : widget->geometry().height()) / 3);
+					const QRect geometry(widget->geometry());
+					const int margin((isHorizontal ? geometry.width() : geometry.height()) / 3);
 
 					if (isHorizontal)
 					{
-						canNest = (position.x() >= (widget->geometry().left() + margin) && position.x() <= (widget->geometry().right() - margin));
+						canNest = (position.x() >= (geometry.left() + margin) && position.x() <= (geometry.right() - margin));
 					}
 					else
 					{
-						canNest = (position.y() >= (widget->geometry().top() + margin) && position.y() <= (widget->geometry().bottom() - margin));
+						canNest = (position.y() >= (geometry.top() + margin) && position.y() <= (geometry.bottom() - margin));
 					}
 				}
 
@@ -551,18 +560,20 @@ void ToolBarWidget::updateDropIndex(const QPoint &position)
 		{
 			if (widget && dropIndex >= 0)
 			{
+				const QPoint center(widget->geometry().center());
+
 				if (isHorizontal)
 				{
-					if (isLeftToRight() && position.x() >= widget->geometry().center().x())
+					if (isLeftToRight() && position.x() >= center.x())
 					{
 						++dropIndex;
 					}
-					else if (!isLeftToRight() && position.x() < widget->geometry().center().x())
+					else if (!isLeftToRight() && position.x() < center.x())
 					{
 						++dropIndex;
 					}
 				}
-				else if (position.y() >= widget->geometry().center().y())
+				else if (position.y() >= center.y())
 				{
 					++dropIndex;
 				}
@@ -1046,7 +1057,7 @@ bool ToolBarWidget::isCollapsed() const
 
 bool ToolBarWidget::isHorizontal() const
 {
-	return !(m_area ==  Qt::LeftToolBarArea || m_area == Qt::RightToolBarArea);
+	return !(m_area == Qt::LeftToolBarArea || m_area == Qt::RightToolBarArea);
 }
 
 bool ToolBarWidget::isDragHandle(const QPoint &position) const
@@ -1074,7 +1085,7 @@ TabBarToolBarWidget::TabBarToolBarWidget(int identifier, Window *window, QWidget
 {
 	setContentsMargins(0, 0, 0, 0);
 
-	layout()->setMargin(0);
+	layout()->setContentsMargins(0, 0, 0, 0);
 
 	setDefinition(getDefinition());
 
@@ -1378,7 +1389,7 @@ bool TabBarToolBarWidget::event(QEvent *event)
 
 		setContentsMargins(0, 0, 0, 0);
 
-		layout()->setMargin(0);
+		layout()->setContentsMargins(0, 0, 0, 0);
 
 		return result;
 	}

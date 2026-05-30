@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2018 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2018 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -438,22 +438,22 @@ void FeedsModel::restoreEntry(Entry *entry)
 		return;
 	}
 
-	Entry *formerParent(m_trash.contains(entry) ? getEntry(m_trash[entry].parent) : m_rootEntry);
+	Entry *previousParent(m_trash.contains(entry) ? getEntry(m_trash[entry].parent) : m_rootEntry);
 
-	if (!formerParent || formerParent->getType() != FolderEntry)
+	if (!previousParent || previousParent->getType() != FolderEntry)
 	{
-		formerParent = m_rootEntry;
+		previousParent = m_rootEntry;
 	}
 
 	if (m_trash.contains(entry))
 	{
-		formerParent->insertRow(m_trash[entry].row, entry->parent()->takeRow(entry->row()));
+		previousParent->insertRow(m_trash[entry].row, entry->parent()->takeRow(entry->row()));
 
 		m_trash.remove(entry);
 	}
 	else
 	{
-		formerParent->appendRow(entry->parent()->takeRow(entry->row()));
+		previousParent->appendRow(entry->parent()->takeRow(entry->row()));
 	}
 
 	readdEntryUrl(entry);
@@ -824,10 +824,8 @@ QMimeData* FeedsModel::mimeData(const QModelIndexList &indexes) const
 		mimeData->setProperty("x-item-index", indexes.at(0));
 	}
 
-	for (int i = 0; i < indexes.count(); ++i)
+	for (const QModelIndex &index: indexes)
 	{
-		const QModelIndex index(indexes.at(i));
-
 		if (index.isValid() && static_cast<EntryType>(index.data(TypeRole).toInt()) == FeedEntry)
 		{
 			texts.append(index.data(UrlRole).toString());
@@ -949,10 +947,8 @@ bool FeedsModel::dropMimeData(const QMimeData *data, Qt::DropAction action, int 
 	{
 		const QVector<QUrl> urls(Utils::extractUrls(data));
 
-		for (int i = 0; i < urls.count(); ++i)
+		for (const QUrl &url: urls)
 		{
-			const QUrl url(urls.at(i));
-
 			addEntry(FeedEntry, {{UrlRole, url}, {TitleRole, (data->property("x-url-title").toString().isEmpty() ? url.toString() : data->property("x-url-title").toString())}}, getEntry(parent), row);
 		}
 

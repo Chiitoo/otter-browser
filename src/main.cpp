@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2015 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -23,7 +23,7 @@
 #include "core/SettingsManager.h"
 #include "ui/MainWindow.h"
 #include "ui/StartupDialog.h"
-#ifdef OTTER_ENABLE_CRASHREPORTS
+#ifdef OTTER_ENABLE_CRASH_REPORTS
 #ifdef Q_OS_WIN32
 #include "../3rdparty/breakpad/src/client/windows/handler/exception_handler.h"
 #elif defined(Q_OS_LINUX)
@@ -56,7 +56,7 @@ void otterMessageHander(QtMsgType type, const QMessageLogContext &context, const
 }
 #endif
 
-#ifdef OTTER_ENABLE_CRASHREPORTS
+#ifdef OTTER_ENABLE_CRASH_REPORTS
 #ifdef Q_OS_WIN32
 bool otterCrashDumpHandler(const wchar_t *dumpDirectory, const wchar_t *dumpIdentifier, void *context, EXCEPTION_POINTERS *exceptionInformation, MDRawAssertionInfo *assertionInformation, bool hasDumpFile)
 {
@@ -105,7 +105,7 @@ int main(int argc, char *argv[])
 	qInstallMessageHandler(otterMessageHander);
 #endif
 
-#ifdef OTTER_ENABLE_CRASHREPORTS
+#ifdef OTTER_ENABLE_CRASH_REPORTS
 #ifdef Q_OS_WIN32
 	new google_breakpad::ExceptionHandler(reinterpret_cast<const wchar_t*>(QStandardPaths::writableLocation(QStandardPaths::TempLocation).utf16()), 0, otterCrashDumpHandler, 0, true);
 #elif defined(Q_OS_LINUX)
@@ -122,10 +122,19 @@ int main(int argc, char *argv[])
 	// constructed, hence the use of the static version of setAttribute().
 //	Application::setAttribute(Qt::AA_EnableHighDpiScaling, true);
 
+#if QT_VERSION < 0x060000
 	// Use static version for this attribute too, for consistency with the above.
 	Application::setAttribute(Qt::AA_UseHighDpiPixmaps, true);
+#endif
 
 	Application application(argc, argv);
+
+#ifdef OTTER_NO_WEB_BACKENDS
+	QMessageBox::critical(nullptr, QLatin1String("Error"), QLatin1String("No web backends available."), QMessageBox::Close);
+
+	return 0;
+#endif
+
 	QCommandLineParser *commandLineParser(Application::getCommandLineParser());
 
 	if (Application::isAboutToQuit() || Application::isRunning() || Application::isUpdating() || commandLineParser->isSet(QLatin1String("report")))

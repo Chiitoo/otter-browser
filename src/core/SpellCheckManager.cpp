@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2015 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -33,7 +33,7 @@ namespace Otter
 
 SpellCheckManager* SpellCheckManager::m_instance(nullptr);
 QString SpellCheckManager::m_defaultDictionary;
-QVector<SpellCheckManager::DictionaryInformation> SpellCheckManager::m_dictionaries;
+QVector<SpellCheckManager::Dictionary> SpellCheckManager::m_dictionaries;
 QSet<QString> SpellCheckManager::m_ignoredWords;
 
 SpellCheckManager::SpellCheckManager(QObject *parent) : QObject(parent)
@@ -95,27 +95,25 @@ void SpellCheckManager::loadDictionaries()
 	const QDir dictionariesDirectory(getDictionariesPath());
 	const QStringList ignoredDictionaries(SettingsManager::getOption(SettingsManager::Browser_SpellCheckIgnoreDctionariesOption).toStringList());
 
-	for (int i = 0; i < dictionaries.count(); ++i)
+	for (const Sonnet::Speller::Dictionary &dictionary: dictionaries)
 	{
-		const Sonnet::Speller::Dictionary dictionary(dictionaries.at(i));
-
 		if (ignoredDictionaries.contains(dictionary.langCode))
 		{
 			continue;
 		}
 
-		DictionaryInformation information;
+		Dictionary information;
 		information.language = dictionary.langCode;
 		information.title = dictionary.name;
 		information.paths = dictionary.paths;
 
-		for (int j = 0; j < information.paths.count(); ++j)
+		for (int i = 0; i < information.paths.count(); ++i)
 		{
-			const QFileInfo pathInformation(information.paths.at(j));
+			const QFileInfo pathInformation(information.paths.at(i));
 
 			if (pathInformation.isRelative())
 			{
-				information.paths[j] = pathInformation.absoluteFilePath();
+				information.paths[i] = pathInformation.absoluteFilePath();
 			}
 
 			if (pathInformation.dir() != dictionariesDirectory)
@@ -155,8 +153,6 @@ void SpellCheckManager::saveIgnoredWords()
 	}
 
 	QTextStream stream(&file);
-	stream.setCodec("UTF-8");
-
 	QSet<QString>::iterator iterator;
 
 	for (iterator = m_ignoredWords.begin(); iterator != m_ignoredWords.end(); ++iterator)
@@ -179,9 +175,9 @@ void SpellCheckManager::updateDefaultDictionary()
 	QStringList dictionaries;
 	dictionaries.reserve(m_dictionaries.count());
 
-	for (int i = 0; i < m_dictionaries.count(); ++i)
+	for (const Dictionary &dictionary: std::as_const(m_dictionaries))
 	{
-		dictionaries.append(m_dictionaries.at(i).language);
+		dictionaries.append(dictionary.language);
 	}
 
 	const QString defaultLanguage(QLocale().bcp47Name());
@@ -193,12 +189,12 @@ void SpellCheckManager::updateDefaultDictionary()
 		return;
 	}
 
-	const QLocale locale(defaultLanguage);
-	const QList<QLocale> locales(QLocale::matchingLocales(locale.language(), locale.script(), QLocale::AnyCountry));
+	const QLocale defaultLocale(defaultLanguage);
+	const QList<QLocale> locales(QLocale::matchingLocales(defaultLocale.language(), defaultLocale.script(), QLocale::AnyCountry));
 
-	for (int i = 0; i < locales.count(); ++i)
+	for (const QLocale &locale: locales)
 	{
-		const QString localeName(locales.at(i).name());
+		const QString localeName(locale.name());
 
 		if (dictionaries.contains(localeName))
 		{
@@ -207,7 +203,7 @@ void SpellCheckManager::updateDefaultDictionary()
 			break;
 		}
 
-		const QString localeBcp47Name(locales.at(i).bcp47Name());
+		const QString localeBcp47Name(locale.bcp47Name());
 
 		if (dictionaries.contains(localeBcp47Name))
 		{
@@ -250,20 +246,20 @@ QString SpellCheckManager::getDictionariesPath()
 	return dictionariesPath;
 }
 
-SpellCheckManager::DictionaryInformation SpellCheckManager::getDictionary(const QString &language)
+SpellCheckManager::Dictionary SpellCheckManager::getDictionary(const QString &language)
 {
-	for (int i = 0; i < m_dictionaries.count(); ++i)
+	for (const Dictionary &dictionary: std::as_const(m_dictionaries))
 	{
-		if (m_dictionaries.at(i).language == language)
+		if (dictionary.language == language)
 		{
-			return m_dictionaries.at(i);
+			return dictionary;
 		}
 	}
 
 	return {};
 }
 
-QVector<SpellCheckManager::DictionaryInformation> SpellCheckManager::getDictionaries()
+QVector<SpellCheckManager::Dictionary> SpellCheckManager::getDictionaries()
 {
 	return m_dictionaries;
 }
@@ -279,7 +275,6 @@ QStringList SpellCheckManager::getIgnoredWords()
 		if (file.open(QIODevice::ReadOnly))
 		{
 			QTextStream stream(&file);
-			stream.setCodec("UTF-8");
 
 			while (!stream.atEnd())
 			{
@@ -311,7 +306,7 @@ bool SpellCheckManager::event(QEvent *event)
 	return QObject::event(event);
 }
 
-Dictionary::Dictionary(const SpellCheckManager::DictionaryInformation &information, QObject *parent) : QObject(parent),
+Dictionary::Dictionary(const SpellCheckManager::Dictionary &information, QObject *parent) : QObject(parent),
 	m_information(information)
 {
 }
@@ -350,9 +345,9 @@ bool Dictionary::canRemove() const
 {
 	bool canRemove(true);
 
-	for (int i = 0; i < m_information.paths.count(); ++i)
+	for (const QString &path: m_information.paths)
 	{
-		if (!QFileInfo(m_information.paths.at(i)).isWritable())
+		if (!QFileInfo(path).isWritable())
 		{
 			canRemove = false;
 		}
@@ -368,9 +363,9 @@ bool Dictionary::remove()
 		return false;
 	}
 
-	for (int i = 0; i < m_information.paths.count(); ++i)
+	for (const QString &path: m_information.paths)
 	{
-		QFile::remove(m_information.paths.at(i));
+		QFile::remove(path);
 	}
 
 	return true;

@@ -26,6 +26,7 @@
 
 #include <QtCore/QHash>
 #include <QtCore/QMap>
+#include <QtCore/QVector>
 #include <QtCore/QLocale>
 #include <QtCore/QCoreApplication>
 #include <QtCore/QPluginLoader>

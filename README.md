@@ -17,7 +17,7 @@ You can either compile Otter Browser from source or use pre-compiled binaries.
 
 ### From source
 
-To build Otter Browser, you will need the following dependencies: **Qt 5.6.0** (or newer), **OpenSSL 1.0** (or newer, depending on your Qt version), **GStreamer 1.0** (or newer) and codecs, and **CMake 3.1.0** (or newer). At the root of the directory where the source code is stored, execute these commands:
+To build Otter Browser, you will need the following dependencies: **Qt 5.15.0** (or newer), **OpenSSL 1.0** (or newer, depending on your Qt version), **GStreamer 1.0** (or newer) and codecs, and **CMake 3.16.0** (or newer). At the root of the directory where the source code is stored, execute these commands:
 
     mkdir build
     cd build
@@ -35,22 +35,18 @@ Linux users can use the official AppImage version available on [SourceForge](htt
 
 Windows users can download binary releases on [SourceForge](https://sourceforge.net/projects/otter-browser/files/).
 
-### Under macOS
-
-DMG packages are available on [SourceForge](https://sourceforge.net/projects/otter-browser/files/).
-
 ## How to contribute
 
 Otter Browser is *your* browser. Because it is free software (GPL v3), you can contribute to make it better. New contributors are always welcome, whether you write code, create resources, report bugs, or suggest features.
 
-The browser is written primarily in C++ and leverages powerful features offered by the Qt5 framework.
+The browser is written primarily in C++ and leverages powerful features offered by the Qt framework.
 
 We also use JavaScript for interacting with rendering engines (when native APIs are not available) and Python 3 is our preferred language for creating tools to ease development.
 
 Have a look at the [open issues](https://github.com/OtterBrowser/otter-browser/issues) to find a mission that resonates with you.
 
-We use [Transifex](https://www.transifex.com/otter-browser/otter-browser/) to translate Otter Browser.
+We use [Transifex](https://app.transifex.com/otter-browser/otter-browser/) to translate Otter Browser.
 
-To stay informed of Otter development, bug fixes and new features, you can join [the official forum](https://dndsanctuary.eu/index.php?board=9.0). We also have two IRC channels on Libera.Chat: [#otter-browser](hhttps://web.libera.chat/#otter-browser) (international) and [#otter-browser-pl](https://web.libera.chat/#otter-browser-pl) (polski / Polish).
+To stay informed of Otter development, bug fixes and new features, you can join [the official forum](https://dndsanctuary.eu/index.php?board=9.0). We also have two IRC channels on Libera.Chat: [#otter-browser](https://web.libera.chat/#otter-browser) (international) and [#otter-browser-pl](https://web.libera.chat/#otter-browser-pl) (polski / Polish).
 
 Read *CONTRIBUTING.md* and don’t hesitate!

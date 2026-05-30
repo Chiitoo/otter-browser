@@ -1,7 +1,7 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
 * Copyright (C) 2014 - 2015 Piotr Wójcik <chocimier@tlen.pl>
-* Copyright (C) 2014 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2014 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -47,7 +47,7 @@ QWidget* OperaNotesImportDataExchanger::createOptionsWidget(QWidget *parent)
 		m_optionsWidget = new QWidget(parent);
 
 		QFormLayout *layout(new QFormLayout(m_optionsWidget));
-		layout->setMargin(0);
+		layout->setContentsMargins(0, 0, 0, 0);
 
 		m_optionsWidget->setLayout(layout);
 
@@ -140,8 +140,6 @@ bool OperaNotesImportDataExchanger::importData(const QString &path)
 	}
 
 	QTextStream stream(&file);
-	stream.setCodec("UTF-8");
-
 	QString line(stream.readLine());
 
 	if (line != QLatin1String("Opera Hotlist version 2.0"))
@@ -243,7 +241,7 @@ bool OperaNotesImportDataExchanger::importData(const QString &path)
 			}
 			else if (line.startsWith(QLatin1String("\tCREATED=")))
 			{
-				note->setData(QDateTime::fromTime_t(line.section(QLatin1Char('='), 1, -1).toUInt()), BookmarksModel::TimeAddedRole);
+				note->setData(QDateTime::fromSecsSinceEpoch(line.section(QLatin1Char('='), 1, -1).toUInt()), BookmarksModel::TimeAddedRole);
 			}
 		}
 	}

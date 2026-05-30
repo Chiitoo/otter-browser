@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2018 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2018 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -25,13 +25,10 @@
 
 #include "ui_TabHistoryContentsWidget.h"
 
-#include <QtWidgets/QDesktopWidget>
-#include <QtWidgets/QToolTip>
-
 namespace Otter
 {
 
-TabHistoryContentsWidget::TabHistoryContentsWidget(const QVariantMap &parameters, QWidget *parent) : ActiveWindowObserverContentsWidget(parameters, nullptr, parent),
+TabHistoryContentsWidget::TabHistoryContentsWidget(const QVariantMap &parameters, QWidget *parent) : ActiveWindowObserverContentsWidget(QLatin1String("tabHistory"), parameters, nullptr, parent),
 	m_ui(new Ui::TabHistoryContentsWidget)
 {
 	m_ui->setupUi(this);
@@ -58,7 +55,7 @@ TabHistoryContentsWidget::TabHistoryContentsWidget(const QVariantMap &parameters
 	});
 	connect(m_ui->filterLineEditWidget, &LineEditWidget::textChanged, m_ui->historyViewWidget, &ItemViewWidget::setFilterString);
 	connect(m_ui->historyViewWidget, &ItemViewWidget::customContextMenuRequested, this, &TabHistoryContentsWidget::showContextMenu);
-	connect(m_ui->historyViewWidget, &ItemViewWidget::clicked, [&](const QModelIndex &index)
+	connect(m_ui->historyViewWidget, &ItemViewWidget::clicked, this, [&](const QModelIndex &index)
 	{
 		Window *window(getActiveWindow());
 
@@ -96,18 +93,19 @@ void TabHistoryContentsWidget::updateHistory()
 	}
 
 	const Session::Window::History history(window->getHistory());
+	int index(-1);
 
 	m_ui->historyViewWidget->getSourceModel()->clear();
 
-	for (int i = 0; i < history.entries.count(); ++i)
+	for (const Session::Window::History::Entry &entry: history.entries)
 	{
-		QStandardItem *item(new QStandardItem(history.entries.at(i).getTitle()));
-		item->setData((history.entries.at(i).icon.isNull() ? ThemesManager::createIcon(QLatin1String("text-html")) : history.entries.at(i).icon), Qt::DecorationRole);
-		item->setData(history.entries.at(i).url, UrlRole);
-		item->setData(history.entries.at(i).time, TimeVisitedRole);
+		QStandardItem *item(new QStandardItem(entry.getTitle()));
+		item->setData((entry.icon.isNull() ? ThemesManager::createIcon(QLatin1String("text-html")) : entry.icon), Qt::DecorationRole);
+		item->setData(entry.url, UrlRole);
+		item->setData(entry.time, TimeVisitedRole);
 		item->setFlags(item->flags() | Qt::ItemNeverHasChildren);
 
-		if (i == history.index)
+		if (++index == history.index)
 		{
 			QFont font(item->font());
 			font.setBold(true);
@@ -144,26 +142,6 @@ void TabHistoryContentsWidget::showContextMenu(const QPoint &position)
 	menu.exec(m_ui->historyViewWidget->mapToGlobal(position));
 }
 
-QString TabHistoryContentsWidget::getTitle() const
-{
-	return tr("Tab History");
-}
-
-QLatin1String TabHistoryContentsWidget::getType() const
-{
-	return QLatin1String("tabHistory");
-}
-
-QUrl TabHistoryContentsWidget::getUrl() const
-{
-	return {};
-}
-
-QIcon TabHistoryContentsWidget::getIcon() const
-{
-	return ThemesManager::createIcon(QLatin1String("tab-history"), false);
-}
-
 bool TabHistoryContentsWidget::eventFilter(QObject *object, QEvent *event)
 {
 	if (object == m_ui->historyViewWidget->viewport() && event->type() == QEvent::ToolTip)
@@ -182,7 +160,7 @@ bool TabHistoryContentsWidget::eventFilter(QObject *object, QEvent *event)
 			}
 		}
 
-		QToolTip::showText(helpEvent->globalPos(), QFontMetrics(QToolTip::font()).elidedText(toolTip, Qt::ElideRight, (QApplication::desktop()->screenGeometry(m_ui->historyViewWidget).width() / 2)), m_ui->historyViewWidget, m_ui->historyViewWidget->visualRect(index));
+		Utils::showToolTip(helpEvent->globalPos(), toolTip, m_ui->historyViewWidget, m_ui->historyViewWidget->visualRect(index));
 
 		return true;
 	}

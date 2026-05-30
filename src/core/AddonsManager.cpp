@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2015 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -19,6 +19,7 @@
 
 #include "AddonsManager.h"
 #include "Console.h"
+#include "JsonSettings.h"
 #include "SessionsManager.h"
 #include "SettingsManager.h"
 #include "ThemesManager.h"
@@ -35,6 +36,7 @@
 #include <QtCore/QFileInfo>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
+#include <QtCore/QTextStream>
 
 namespace Otter
 {
@@ -94,6 +96,147 @@ bool Addon::canRemove() const
 bool Addon::remove()
 {
 	return false;
+}
+
+JsonAddon::JsonAddon() : Addon(),
+	m_isModified(false)
+{
+}
+
+void JsonAddon::loadMetaData(const QString &path)
+{
+	const JsonSettings settings(path);
+	const QStringList comments(settings.getComment().split(QLatin1Char('\n')));
+
+	for (const QString &comment: comments)
+	{
+		const QString key(comment.section(QLatin1Char(':'), 0, 0).trimmed());
+		const QString value(comment.section(QLatin1Char(':'), 1).trimmed());
+
+		if (key == QLatin1String("Title"))
+		{
+			m_metaData.title = value;
+		}
+		else if (key == QLatin1String("Description"))
+		{
+			m_metaData.description = value;
+		}
+		else if (key == QLatin1String("Author"))
+		{
+			m_metaData.author = value;
+		}
+		else if (key == QLatin1String("Version"))
+		{
+			m_metaData.version = value;
+		}
+		else if (key == QLatin1String("HomePage"))
+		{
+			m_metaData.homePage = QUrl(value);
+		}
+	}
+}
+
+void JsonAddon::setTitle(const QString &title)
+{
+	if (title != m_metaData.title)
+	{
+		m_metaData.title = title;
+		m_isModified = true;
+	}
+}
+
+void JsonAddon::setDescription(const QString &description)
+{
+	if (description != m_metaData.description)
+	{
+		m_metaData.description = description;
+		m_isModified = true;
+	}
+}
+
+void JsonAddon::setAuthor(const QString &author)
+{
+	if (author != m_metaData.author)
+	{
+		m_metaData.author = author;
+		m_isModified = true;
+	}
+}
+
+void JsonAddon::setVersion(const QString &version)
+{
+	if (version != m_metaData.version)
+	{
+		m_metaData.version = version;
+		m_isModified = true;
+	}
+}
+
+void JsonAddon::setMetaData(const MetaData &metaData)
+{
+	if (metaData.title != m_metaData.title || metaData.description != m_metaData.description || metaData.author != m_metaData.author || metaData.version != m_metaData.version || metaData.homePage != m_metaData.homePage)
+	{
+		m_metaData = metaData;
+		m_isModified = true;
+	}
+}
+
+void JsonAddon::setModified(bool isModified)
+{
+	m_isModified = isModified;
+}
+
+QString JsonAddon::formatComment(const QString &type)
+{
+	QString comment;
+	QTextStream stream(&comment);
+	stream << QLatin1String("Title: ") << (m_metaData.title.isEmpty() ? QT_TR_NOOP("(Untitled)") : m_metaData.title) << QLatin1Char('\n');
+	stream << QLatin1String("Description: ") << m_metaData.description << QLatin1Char('\n');
+	stream << QLatin1String("Type: ") << type << QLatin1String("\n");
+	stream << QLatin1String("Author: ") << m_metaData.author << QLatin1Char('\n');
+	stream << QLatin1String("Version: ") << m_metaData.version;
+
+	if (m_metaData.homePage.isValid())
+	{
+		stream << QLatin1Char('\n') << QLatin1String("HomePage: ") << m_metaData.homePage.toString();
+	}
+
+	return comment;
+}
+
+QString JsonAddon::getTitle() const
+{
+	return (m_metaData.title.isEmpty() ? QCoreApplication::translate("Otter::JsonAddon", "(Untitled)") : m_metaData.title);
+}
+
+QString JsonAddon::getDescription() const
+{
+	return m_metaData.description;
+}
+
+QString JsonAddon::getAuthor() const
+{
+	return m_metaData.author;
+}
+
+QString JsonAddon::getVersion() const
+{
+	return m_metaData.version;
+}
+
+QUrl JsonAddon::getHomePage() const
+{
+	return m_metaData.homePage;
+}
+
+Addon::MetaData JsonAddon::getMetaData() const
+{
+	return m_metaData;
+}
+
+bool JsonAddon::isModified() const
+{
+	return m_isModified;
 }
 
 AddonsManager* AddonsManager::m_instance(nullptr);
@@ -163,7 +306,7 @@ void AddonsManager::registerSpecialPage(const AddonsManager::SpecialPageInformat
 
 void AddonsManager::loadUserScripts()
 {
-	qDeleteAll(m_userScripts.values());
+	qDeleteAll(m_userScripts);
 
 	m_userScripts.clear();
 
@@ -185,9 +328,8 @@ void AddonsManager::loadUserScripts()
 
 	const QList<QFileInfo> scriptFiles(QDir(SessionsManager::getWritableDataPath(QLatin1String("scripts"))).entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot));
 
-	for (int i = 0; i < scriptFiles.count(); ++i)
+	for (const QFileInfo &scriptFile: scriptFiles)
 	{
-		const QFileInfo scriptFile(scriptFiles.at(i));
 		const QString path(QDir(scriptFile.absoluteFilePath()).filePath(scriptFile.fileName() + QLatin1String(".js")));
 
 		if (!QFile::exists(path))

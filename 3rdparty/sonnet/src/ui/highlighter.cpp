@@ -40,6 +40,9 @@
 #include <QMetaMethod>
 #include <QPlainTextEdit>
 #include <QDebug>
+#if QT_VERSION >= 0x060000
+#include <QtCore5Compat/QStringRef>
+#endif
 
 namespace Sonnet
 {

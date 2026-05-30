@@ -1,7 +1,7 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
 * Copyright (C) 2016 Jan Bajer aka bajasoft <jbajer@gmail.com>
-* Copyright (C) 2016 - 2020 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2016 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -76,28 +76,21 @@ ContentBlockingProfileDialog::ContentBlockingProfileDialog(const ContentFiltersP
 		{
 			m_ui->updateButton->setEnabled(profileSummary.updateUrl.isValid());
 
-			connect(profile, &ContentFiltersProfile::profileModified, this, [&]()
+			connect(profile, &ContentFiltersProfile::profileModified, profile, [=]()
 			{
-				profile = ContentFiltersManager::getProfile(m_name);
+				m_lastUpdate = profile->getLastUpdate();
 
-				if (profile)
-				{
-					m_lastUpdate = profile->getLastUpdate();
-
-					m_ui->lastUpdateTextLabel->setText(Utils::formatDateTime(profile->getLastUpdate()));
-				}
+				m_ui->lastUpdateTextLabel->setText(Utils::formatDateTime(m_lastUpdate));
 			});
-			connect(m_ui->updateUrLineEdit, &QLineEdit::textChanged, [&]()
+			connect(m_ui->updateUrLineEdit, &QLineEdit::textChanged, this, [&]()
 			{
 				m_ui->updateButton->setEnabled(QUrl(m_ui->updateUrLineEdit->text()).isValid());
 			});
-			connect(m_ui->updateButton, &QPushButton::clicked, [&]()
+			connect(m_ui->updateButton, &QPushButton::clicked, profile, [=]()
 			{
-				profile = ContentFiltersManager::getProfile(m_name);
-
 				const QUrl url(m_ui->updateUrLineEdit->text());
 
-				if (profile && url.isValid())
+				if (url.isValid())
 				{
 					profile->update(url);
 				}
@@ -135,7 +128,7 @@ ContentBlockingProfileDialog::ContentBlockingProfileDialog(const ContentFiltersP
 	columnResizer->addWidgetsFromFormLayout(m_ui->settingsTopLayout, QFormLayout::LabelRole);
 	columnResizer->addWidgetsFromFormLayout(m_ui->settingsBottomLayout, QFormLayout::LabelRole);
 
-	connect(m_ui->sourceEditWidget, &SourceEditWidget::textChanged, [&]()
+	connect(m_ui->sourceEditWidget, &SourceEditWidget::textChanged, this, [&]()
 	{
 		m_ui->saveButton->setEnabled(true);
 	});
@@ -163,7 +156,7 @@ void ContentBlockingProfileDialog::closeEvent(QCloseEvent *event)
 {
 	if (m_ui->saveButton->isEnabled())
 	{
-		const int result(QMessageBox::question(this, tr("Question"), tr("The source has been modified.\nDo you want to save it?"), QMessageBox::Yes, QMessageBox::No, QMessageBox::Cancel));
+		const int result(QMessageBox::question(this, tr("Question"), tr("The source has been modified.\nDo you want to save it?"), (QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel), QMessageBox::Yes));
 
 		if (result == QMessageBox::Cancel)
 		{
@@ -224,7 +217,6 @@ void ContentBlockingProfileDialog::handleCurrentTabChanged(int index)
 	if (file.open(QIODevice::ReadOnly | QIODevice::Text))
 	{
 		QTextStream stream(&file);
-		stream.setCodec("UTF-8");
 
 		m_ui->sourceEditWidget->setPlainText(stream.readAll());
 		m_ui->sourceEditWidget->markAsLoaded();
@@ -328,7 +320,6 @@ void ContentBlockingProfileDialog::saveSource()
 	if (file.open(QIODevice::WriteOnly | QIODevice::Text))
 	{
 		QTextStream stream(&file);
-		stream.setCodec("UTF-8");
 		stream << m_ui->sourceEditWidget->toPlainText();
 
 		file.close();

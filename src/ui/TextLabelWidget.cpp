@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2020 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -39,7 +39,7 @@ TextLabelWidget::TextLabelWidget(QWidget *parent) : QLineEdit(parent),
 	setReadOnly(true);
 	setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 	setStyleSheet(QLatin1String("QLineEdit {background:transparent;}"));
-	QLineEdit::setText(tr("<empty>"));
+	setFallbackText(tr("<empty>"));
 }
 
 void TextLabelWidget::mousePressEvent(QMouseEvent *event)
@@ -84,7 +84,7 @@ void TextLabelWidget::contextMenuEvent(QContextMenuEvent *event)
 
 void TextLabelWidget::clear()
 {
-	QLineEdit::setText(tr("<empty>"));
+	QLineEdit::setText(m_fallbackText);
 
 	m_url.clear();
 	m_isEmpty = true;
@@ -92,20 +92,34 @@ void TextLabelWidget::clear()
 	updateStyle();
 }
 
+void TextLabelWidget::setFallbackText(const QString &text)
+{
+	if (text != m_fallbackText)
+	{
+		m_fallbackText = text;
+
+		if (m_isEmpty)
+		{
+			QLineEdit::setText(text);
+		}
+	}
+}
+
 void TextLabelWidget::updateStyle()
 {
 	QFont font(this->font());
 	font.setUnderline(m_url.isValid() && style()->styleHint(QStyle::SH_UnderlineShortcut) > 0);
 
+	const QPalette applicationPalette(QGuiApplication::palette());
 	QPalette palette(this->palette());
 
 	if (m_isEmpty)
 	{
-		palette.setColor(QPalette::Text, QGuiApplication::palette().color(QPalette::Disabled, QPalette::WindowText));
+		palette.setColor(QPalette::Text, applicationPalette.color(QPalette::Disabled, QPalette::WindowText));
 	}
 	else
 	{
-		palette.setColor(QPalette::Text, QGuiApplication::palette().color(m_url.isValid() ? QPalette::Link : QPalette::WindowText));
+		palette.setColor(QPalette::Text, applicationPalette.color(m_url.isValid() ? QPalette::Link : QPalette::WindowText));
 	}
 
 	setCursor(m_url.isValid() ? Qt::PointingHandCursor : Qt::ArrowCursor);
@@ -124,7 +138,7 @@ void TextLabelWidget::setText(const QString &text)
 			updateStyle();
 		}
 
-		QLineEdit::setText(m_isEmpty ? tr("<empty>") : text);
+		QLineEdit::setText(m_isEmpty ? m_fallbackText : text);
 		setCursorPosition(0);
 		updateGeometry();
 	}
@@ -138,6 +152,11 @@ void TextLabelWidget::setUrl(const QUrl &url)
 	m_isEmpty = url.isEmpty();
 
 	updateStyle();
+}
+
+QString TextLabelWidget::getFallbackText() const
+{
+	return m_fallbackText;
 }
 
 QSize TextLabelWidget::sizeHint() const
@@ -163,13 +182,6 @@ bool TextLabelWidget::event(QEvent *event)
 		case QEvent::ApplicationPaletteChange:
 		case QEvent::StyleChange:
 			updateStyle();
-
-			break;
-		case QEvent::LanguageChange:
-			if (m_isEmpty)
-			{
-				QLineEdit::setText(tr("<empty>"));
-			}
 
 			break;
 		default:

@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2015 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -158,6 +158,11 @@ void ContentPreferencesPage::changeEvent(QEvent *event)
 			m_ui->fontsViewWidget->getSourceModel()->setHorizontalHeaderLabels({tr("Style"), tr("Font"), tr("Preview")});
 			m_ui->colorsViewWidget->getSourceModel()->setHorizontalHeaderLabels({tr("Type"), tr("Preview")});
 
+			for (int i = 0; i < m_ui->fontsViewWidget->getRowCount(); ++i)
+			{
+				m_ui->fontsViewWidget->setData(m_ui->fontsViewWidget->getIndex(i, 2), tr("The quick brown fox jumps over the lazy dog"), Qt::DisplayRole);
+			}
+
 			break;
 		default:
 			break;
@@ -213,10 +218,11 @@ void ContentPreferencesPage::load()
 
 	for (int i = 0; i < fonts.count(); ++i)
 	{
-		const QString family(SettingsManager::getOption(SettingsManager::getOptionIdentifier((QLatin1String("Content/") + fonts.at(i)))).toString());
+		const QString optionName(QLatin1String("Content/") + fonts.at(i));
+		const QString family(SettingsManager::getOption(SettingsManager::getOptionIdentifier(optionName)).toString());
 		QList<QStandardItem*> items({new QStandardItem(fontCategories.at(i)), new QStandardItem(family), new QStandardItem(tr("The quick brown fox jumps over the lazy dog"))});
 		items[0]->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemNeverHasChildren);
-		items[1]->setData(QLatin1String("Content/") + fonts.at(i), Qt::UserRole);
+		items[1]->setData(optionName, Qt::UserRole);
 		items[1]->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemNeverHasChildren);
 		items[2]->setData(QFont(family), Qt::FontRole);
 		items[2]->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemNeverHasChildren);
@@ -302,12 +308,16 @@ void ContentPreferencesPage::save()
 
 	for (int i = 0; i < m_ui->fontsViewWidget->getRowCount(); ++i)
 	{
-		SettingsManager::setOption(SettingsManager::getOptionIdentifier(m_ui->fontsViewWidget->getIndex(i, 1).data(Qt::UserRole).toString()), m_ui->fontsViewWidget->getIndex(i, 1).data(Qt::DisplayRole));
+		const QModelIndex index(m_ui->fontsViewWidget->getIndex(i, 1));
+
+		SettingsManager::setOption(SettingsManager::getOptionIdentifier(index.data(Qt::UserRole).toString()), index.data(Qt::DisplayRole));
 	}
 
 	for (int i = 0; i < m_ui->colorsViewWidget->getRowCount(); ++i)
 	{
-		SettingsManager::setOption(SettingsManager::getOptionIdentifier(m_ui->colorsViewWidget->getIndex(i, 1).data(Qt::UserRole).toString()), m_ui->colorsViewWidget->getIndex(i, 1).data(Qt::EditRole));
+		const QModelIndex index(m_ui->fontsViewWidget->getIndex(i, 1));
+
+		SettingsManager::setOption(SettingsManager::getOptionIdentifier(index.data(Qt::UserRole).toString()), index.data(Qt::EditRole));
 	}
 }
 

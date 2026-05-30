@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2015 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -20,12 +20,14 @@
 #include "TabSwitcherWidget.h"
 #include "Animation.h"
 #include "MainWindow.h"
+#include "Style.h"
 #include "Window.h"
 #include "../core/Application.h"
 #include "../core/SessionModel.h"
 #include "../core/ThemesManager.h"
 
 #include <QtGui/QKeyEvent>
+#include <QtGui/QPainter>
 #include <QtWidgets/QFrame>
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QHeaderView>
@@ -199,7 +201,9 @@ void TabSwitcherWidget::handleCurrentTabChanged(const QModelIndex &index)
 		return;
 	}
 
-	if (window->getLoadingState() == WebWidget::DeferredLoadingState || window->getLoadingState() == WebWidget::OngoingLoadingState)
+	const WebWidget::LoadingState loadingState(window->getLoadingState());
+
+	if (loadingState == WebWidget::DeferredLoadingState || loadingState == WebWidget::OngoingLoadingState)
 	{
 		if (!m_spinnerAnimation)
 		{
@@ -222,7 +226,31 @@ void TabSwitcherWidget::handleCurrentTabChanged(const QModelIndex &index)
 			m_spinnerAnimation->stop();
 		}
 
-		m_previewLabel->setPixmap((window->getLoadingState() == WebWidget::CrashedLoadingState) ? ThemesManager::createIcon(QLatin1String("tab-crashed")).pixmap(32, 32) : window->createThumbnail());
+		QPixmap pixmap;
+
+		if (loadingState != WebWidget::CrashedLoadingState)
+		{
+			pixmap = window->createThumbnail();
+		}
+
+		if (pixmap.isNull())
+		{
+			pixmap = QPixmap(32, 32);
+			pixmap.setDevicePixelRatio(devicePixelRatio());
+			pixmap.fill(Qt::transparent);
+
+			QRect rectangle(0, 0, 32, 32);
+			QPainter painter(&pixmap);
+
+			window->getIcon().paint(&painter, rectangle);
+
+			if (loadingState == WebWidget::CrashedLoadingState)
+			{
+				ThemesManager::getStyle()->drawIconOverlay(rectangle, ThemesManager::createIcon(QLatin1String("emblem-crashed")), &painter);
+			}
+		}
+
+		m_previewLabel->setPixmap(pixmap);
 	}
 }
 
@@ -255,33 +283,34 @@ QStandardItem* TabSwitcherWidget::createRow(Window *window, const QVariant &inde
 		color.setAlpha(150);
 	}
 
+	const quint64 identifier(window->getIdentifier());
 	QStandardItem *item(new QStandardItem(window->getIcon(), window->getTitle()));
-	item->setData(color, Qt::TextColorRole);
-	item->setData(window->getIdentifier(), IdentifierRole);
+	item->setData(color, Qt::ForegroundRole);
+	item->setData(identifier, IdentifierRole);
 	item->setData(index, OrderRole);
 	item->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled);
 
-	connect(window, &Window::titleChanged, this, [&](const QString &title)
+	connect(window, &Window::titleChanged, this, [=](const QString &title)
 	{
-		const int row(findRow(window->getIdentifier()));
+		const int row(findRow(identifier));
 
 		if (row >= 0)
 		{
 			m_model->setData(m_model->index(row, 0), title, Qt::DisplayRole);
 		}
 	});
-	connect(window, &Window::iconChanged, this, [&](const QIcon &icon)
+	connect(window, &Window::iconChanged, this, [=](const QIcon &icon)
 	{
-		const int row(findRow(window->getIdentifier()));
+		const int row(findRow(identifier));
 
 		if (row >= 0)
 		{
 			m_model->setData(m_model->index(row, 0), icon, Qt::DecorationRole);
 		}
 	});
-	connect(window, &Window::loadingStateChanged, this, [&](WebWidget::LoadingState state)
+	connect(window, &Window::loadingStateChanged, this, [=](WebWidget::LoadingState state)
 	{
-		const int row(findRow(window->getIdentifier()));
+		const int row(findRow(identifier));
 
 		if (row >= 0)
 		{
@@ -292,7 +321,7 @@ QStandardItem* TabSwitcherWidget::createRow(Window *window, const QVariant &inde
 				color.setAlpha(150);
 			}
 
-			m_model->setData(m_model->index(row, 0), color, Qt::TextColorRole);
+			m_model->setData(m_model->index(row, 0), color, Qt::ForegroundRole);
 		}
 	});
 

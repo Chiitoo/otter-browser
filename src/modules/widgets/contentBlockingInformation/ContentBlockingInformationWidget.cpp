@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2016 - 2019 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2016 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2016 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -37,7 +37,7 @@ ContentBlockingInformationWidget::ContentBlockingInformationWidget(Window *windo
 	m_window(window),
 	m_elementsMenu(nullptr),
 	m_profilesMenu(nullptr),
-	m_amount(0),
+	m_requestsAmount(0),
 	m_isContentBlockingEnabled(false)
 {
 	QMenu *menu(new QMenu(this));
@@ -84,7 +84,7 @@ void ContentBlockingInformationWidget::resizeEvent(QResizeEvent *event)
 
 void ContentBlockingInformationWidget::clear()
 {
-	m_amount = 0;
+	m_requestsAmount = 0;
 
 	updateState();
 }
@@ -111,20 +111,26 @@ void ContentBlockingInformationWidget::toggleContentBlocking()
 
 void ContentBlockingInformationWidget::toggleOption(QAction *action)
 {
-	if (action && m_window && !action->data().isNull())
+	if (!m_window || !action || action->data().isNull())
 	{
-		const QString profile(action->data().toString());
-		QStringList profiles(m_window->getOption(SettingsManager::ContentBlocking_ProfilesOption).toStringList());
+		return;
+	}
 
-		if (!action->isChecked())
-		{
-			profiles.removeAll(profile);
-		}
-		else if (!profiles.contains(profile))
-		{
-			profiles.append(profile);
-		}
+	const QString profile(action->data().toString());
+	const QStringList currentProfiles(m_window->getOption(SettingsManager::ContentBlocking_ProfilesOption).toStringList());
+	QStringList profiles(currentProfiles);
 
+	if (!action->isChecked())
+	{
+		profiles.removeAll(profile);
+	}
+	else if (!profiles.contains(profile))
+	{
+		profiles.append(profile);
+	}
+
+	if (profiles != currentProfiles)
+	{
 		m_window->setOption(SettingsManager::ContentBlocking_ProfilesOption, profiles);
 	}
 }
@@ -138,13 +144,13 @@ void ContentBlockingInformationWidget::populateElementsMenu()
 		return;
 	}
 
-	const QVector<NetworkManager::ResourceInformation> requests(m_window->getWebWidget()->getBlockedRequests().mid(m_amount - 50));
+	const QVector<NetworkManager::ResourceInformation> requests(m_window->getWebWidget()->getBlockedRequests().mid(m_requestsAmount - 50));
 
-	for (int i = 0; i < requests.count(); ++i)
+	for (const NetworkManager::ResourceInformation &request: requests)
 	{
 		QString type;
 
-		switch (requests.at(i).resourceType)
+		switch (request.resourceType)
 		{
 			case NetworkManager::MainFrameType:
 				type = tr("main frame");
@@ -192,8 +198,8 @@ void ContentBlockingInformationWidget::populateElementsMenu()
 				break;
 		}
 
-		QAction *action(m_elementsMenu->addAction(QStringLiteral("%1\t [%2]").arg(Utils::elideText(requests.at(i).url.toString(), m_elementsMenu->fontMetrics(), m_elementsMenu), type)));
-		action->setStatusTip(requests.at(i).url.toString());
+		QAction *action(m_elementsMenu->addAction(QStringLiteral("%1\t [%2]").arg(Utils::elideText(request.url.toString(), m_elementsMenu->fontMetrics(), m_elementsMenu), type)));
+		action->setStatusTip(request.url.toString());
 	}
 }
 
@@ -215,9 +221,9 @@ void ContentBlockingInformationWidget::populateProfilesMenu()
 	const QVector<NetworkManager::ResourceInformation> requests(m_window->getWebWidget()->getBlockedRequests());
 	QHash<QString, int> amounts;
 
-	for (int i = 0; i < requests.count(); ++i)
+	for (const NetworkManager::ResourceInformation &request: requests)
 	{
-		const QString profile(requests.at(i).metaData.value(NetworkManager::ContentBlockingProfileMetaData).toString());
+		const QString profile(request.metaData.value(NetworkManager::ContentBlockingProfileMetaData).toString());
 
 		if (amounts.contains(profile))
 		{
@@ -232,23 +238,23 @@ void ContentBlockingInformationWidget::populateProfilesMenu()
 	const QVector<ContentFiltersProfile*> profiles(ContentFiltersManager::getContentBlockingProfiles());
 	const QStringList enabledProfiles(m_window->getOption(SettingsManager::ContentBlocking_ProfilesOption).toStringList());
 
-	for (int i = 0; i < profiles.count(); ++i)
+	for (ContentFiltersProfile *profile: profiles)
 	{
-		if (profiles.at(i))
+		if (profile)
 		{
-			const int amount(amounts.value(profiles.at(i)->getName()));
-			const QString title(Utils::elideText(profiles.at(i)->getTitle(), m_profilesMenu->fontMetrics(), m_profilesMenu));
-			QAction *profileAction(m_profilesMenu->addAction((amount > 0) ? QStringLiteral("%1 (%2)").arg(title).arg(amount) : title));
-			profileAction->setData(profiles.at(i)->getName());
+			const int amount(amounts.value(profile->getName()));
+			const QString title(Utils::elideText(profile->getTitle(), m_profilesMenu->fontMetrics(), m_profilesMenu));
+			QAction *profileAction(m_profilesMenu->addAction((amount > 0) ? QStringLiteral("%1 (%2)").arg(title, QString::number(amount)) : title));
+			profileAction->setData(profile->getName());
 			profileAction->setCheckable(true);
-			profileAction->setChecked(enabledProfiles.contains(profiles.at(i)->getName()));
+			profileAction->setChecked(enabledProfiles.contains(profile->getName()));
 		}
 	}
 }
 
-void ContentBlockingInformationWidget::handleRequest()
+void ContentBlockingInformationWidget::handleBlockedRequest()
 {
-	++m_amount;
+	++m_requestsAmount;
 
 	updateState();
 }
@@ -288,20 +294,20 @@ void ContentBlockingInformationWidget::updateState()
 
 	QString label;
 
-	if (m_amount > 999999)
+	if (m_requestsAmount > 999999)
 	{
-		label = QString::number(m_amount / 1000000) + QLatin1Char('M');
+		label = QString::number(m_requestsAmount / 1000000) + QLatin1Char('M');
 	}
-	else if (m_amount > 999)
+	else if (m_requestsAmount > 999)
 	{
-		label = QString::number(m_amount / 1000) + QLatin1Char('K');
+		label = QString::number(m_requestsAmount / 1000) + QLatin1Char('K');
 	}
 	else
 	{
-		label = QString::number(m_amount);
+		label = QString::number(m_requestsAmount);
 	}
 
-	const qreal labelWidth(QFontMetricsF(font).width(label));
+	const qreal labelWidth(QFontMetricsF(font).horizontalAdvance(label));
 
 	font.setPixelSize(qRound(fontSize * 0.8));
 
@@ -319,7 +325,7 @@ void ContentBlockingInformationWidget::updateState()
 	setToolTip(text());
 	setIcon(m_icon);
 
-	m_elementsMenu->setEnabled(m_amount > 0);
+	m_elementsMenu->setEnabled(m_requestsAmount > 0);
 }
 
 void ContentBlockingInformationWidget::setWindow(Window *window)
@@ -327,19 +333,19 @@ void ContentBlockingInformationWidget::setWindow(Window *window)
 	if (m_window && !m_window->isAboutToClose())
 	{
 		disconnect(m_window, &Window::aboutToNavigate, this, &ContentBlockingInformationWidget::clear);
-		disconnect(m_window, &Window::requestBlocked, this, &ContentBlockingInformationWidget::handleRequest);
+		disconnect(m_window, &Window::requestBlocked, this, &ContentBlockingInformationWidget::handleBlockedRequest);
 	}
 
 	m_window = window;
-	m_amount = 0;
+	m_requestsAmount = 0;
 
 	if (window && window->getWebWidget())
 	{
-		m_amount = window->getWebWidget()->getBlockedRequests().count();
+		m_requestsAmount = window->getWebWidget()->getBlockedRequests().count();
 		m_isContentBlockingEnabled = (m_window->getOption(SettingsManager::ContentBlocking_EnableContentBlockingOption).toBool());
 
 		connect(m_window, &Window::aboutToNavigate, this, &ContentBlockingInformationWidget::clear);
-		connect(m_window, &Window::requestBlocked, this, &ContentBlockingInformationWidget::handleRequest);
+		connect(m_window, &Window::requestBlocked, this, &ContentBlockingInformationWidget::handleBlockedRequest);
 	}
 	else
 	{
@@ -364,7 +370,7 @@ QString ContentBlockingInformationWidget::getText() const
 		}
 	}
 
-	return text.replace(QLatin1String("{amount}"), QString::number(m_amount));
+	return text.replace(QLatin1String("{amount}"), QString::number(m_requestsAmount));
 }
 
 QIcon ContentBlockingInformationWidget::getIcon() const

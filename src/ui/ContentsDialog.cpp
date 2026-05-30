@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -63,7 +63,7 @@ ContentsDialog::ContentsDialog(const QIcon &icon, const QString &title, const QS
 	QLabel *iconLabel(new QLabel(m_headerWidget));
 	iconLabel->setToolTip(title);
 	iconLabel->setPixmap(icon.pixmap(16, 16));
-	iconLabel->setMargin(5);
+	iconLabel->setContentsMargins(5, 5, 5, 5);
 
 	QFont font(this->font());
 	font.setBold(true);
@@ -74,7 +74,7 @@ ContentsDialog::ContentsDialog(const QIcon &icon, const QString &title, const QS
 
 	m_closeLabel->setToolTip(tr("Close"));
 	m_closeLabel->setPixmap(ThemesManager::createIcon(QLatin1String("window-close")).pixmap(16, 16));
-	m_closeLabel->setMargin(5);
+	m_closeLabel->setContentsMargins(5, 5, 5, 5);
 	m_closeLabel->installEventFilter(this);
 
 	headerLayout->addWidget(iconLabel);
@@ -252,9 +252,11 @@ void ContentsDialog::keyPressEvent(QKeyEvent *event)
 
 					for (int i = 0; i < buttons.count(); ++i)
 					{
-						if (buttons.at(i)->isDefault())
+						QPushButton *button(buttons.at(i));
+
+						if (button->isDefault())
 						{
-							buttons.at(i)->click();
+							button->click();
 
 							return;
 						}

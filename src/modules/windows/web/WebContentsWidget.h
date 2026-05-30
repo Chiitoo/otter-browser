@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2015 Jan Bajer aka bajasoft <jbajer@gmail.com>
 * Copyright (C) 2017 Piotr Wójcik <chocimier@tlen.pl>
 *
@@ -116,7 +116,7 @@ protected slots:
 	void closePopupsBar();
 	void handleOptionChanged(int identifier, const QVariant &value);
 	void handleUrlChange(const QUrl &url);
-	void handleSavePasswordRequest(const PasswordsManager::PasswordInformation &password, bool isUpdate);
+	void handleSavePasswordRequest(const PasswordsManager::Password &password, bool isUpdate);
 	void handlePopupWindowRequest(const QUrl &parentUrl, const QUrl &popupUrl);
 	void handlePermissionRequest(WebWidget::FeaturePermission feature, const QUrl &url, bool isCancellation);
 	void handleInspectorVisibilityChangeRequest(bool isVisible);
@@ -147,7 +147,7 @@ private:
 	bool m_isIgnoringMouseRelease;
 
 	static QString m_sharedQuickFindQuery;
-	static QMap<ScrollDirections, QPixmap> m_scrollCursors;
+	static QMap<ScrollDirections, QCursor> m_scrollCursors;
 };
 
 }

@@ -2,7 +2,7 @@
 * Otter Browser: Web browser controlled by the user, not vice-versa.
 * Copyright (C) 2010 - 2014 David Rosca <nowrep@gmail.com>
 * Copyright (C) 2014 - 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
-* Copyright (C) 2015 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -57,10 +57,10 @@ public:
 		}
 	};
 
-	explicit AdblockContentFiltersProfile(const ProfileSummary &profileSummary, const QStringList &languages, ProfileFlags flags, QObject *parent = nullptr);
+	explicit AdblockContentFiltersProfile(const ProfileSummary &summary, const QStringList &languages, ProfileFlags flags, QObject *parent = nullptr);
 
 	void clear() override;
-	void setProfileSummary(const ProfileSummary &profileSummary) override;
+	void setProfileSummary(const ProfileSummary &summary) override;
 	QString getName() const override;
 	QString getTitle() const override;
 	QString getPath() const override;
@@ -70,7 +70,7 @@ public:
 	ContentFiltersManager::CosmeticFiltersResult getCosmeticFilters(const QStringList &domains, bool isDomainOnly) override;
 	ContentFiltersManager::CheckResult checkUrl(const QUrl &baseUrl, const QUrl &requestUrl, NetworkManager::ResourceType resourceType) override;
 	static HeaderInformation loadHeader(QIODevice *rulesDevice);
-	static QHash<RuleType, quint32> loadRulesInformation(const ProfileSummary &profileSummary, QIODevice *rulesDevice);
+	static QHash<RuleType, quint32> loadRulesInformation(const ProfileSummary &summary, QIODevice *rulesDevice);
 	QVector<QLocale::Language> getLanguages() const override;
 	ProfileCategory getCategory() const override;
 	ContentFiltersManager::CosmeticFiltersMode getCosmeticFiltersMode() const override;
@@ -78,12 +78,11 @@ public:
 	ProfileFlags getFlags() const override;
 	int getUpdateInterval() const override;
 	int getUpdateProgress() const override;
-	static bool create(const ProfileSummary &profileSummary, QIODevice *rulesDevice = nullptr, bool canOverwriteExisting = false);
+	static bool create(const ProfileSummary &summary, QIODevice *rulesDevice = nullptr, bool canOverwriteExisting = false);
 	static bool create(const QUrl &url, bool canOverwriteExisting = false);
 	bool update(const QUrl &url = {}) override;
 	bool remove() override;
 	bool areWildcardsEnabled() const override;
-	bool isFraud(const QUrl &url) override;
 	bool isUpdating() const override;
 
 protected:
@@ -128,7 +127,9 @@ protected:
 			bool needsDomainCheck = false;
 		};
 
-		QChar value = 0;
+		~Node();
+
+		QChar value;
 		QVarLengthArray<Node*, 1> children;
 		QVarLengthArray<Rule*, 1> rules;
 	};
@@ -151,13 +152,12 @@ protected:
 
 	void loadHeader();
 	void parseRuleLine(const QString &rule);
-	void parseStyleSheetRule(const QStringList &line, QMultiHash<QString, QString> &list);
-	void deleteNode(Node *node) const;
-	ContentFiltersManager::CheckResult checkUrlSubstring(const Node *node, const QString &subString, QString currentRule, const Request &request) const;
+	QMultiHash<QString, QString> parseStyleSheetRule(const QStringList &line);
+	ContentFiltersManager::CheckResult checkUrlSubstring(const Node *node, const QString &substring, QString currentRule, const Request &request) const;
 	ContentFiltersManager::CheckResult checkRuleMatch(const Node::Rule *rule, const QString &currentRule, const Request &request) const;
 	ContentFiltersManager::CheckResult evaluateNodeRules(const Node *node, const QString &currentRule, const Request &request) const;
 	bool loadRules();
-	bool resolveDomainExceptions(const QString &url, const QStringList &ruleList) const;
+	bool domainContains(const QString &host, const QStringList &domains) const;
 
 protected slots:
 	void raiseError(const QString &message, ProfileError error);
@@ -166,7 +166,7 @@ protected slots:
 private:
 	Node *m_root;
 	DataFetchJob *m_dataFetchJob;
-	ProfileSummary m_profileSummary;
+	ProfileSummary m_summary;
 	QRegularExpression m_domainExpression;
 	QStringList m_cosmeticFiltersRules;
 	QVector<QLocale::Language> m_languages;

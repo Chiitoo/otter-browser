@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2015 - 2017 Piotr Wójcik <chocimier@tlen.pl>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -29,7 +29,7 @@
 namespace Otter
 {
 
-class MouseProfile final : public Addon
+class MouseProfile final : public JsonAddon
 {
 public:
 	enum LoadMode
@@ -68,31 +68,16 @@ public:
 
 	explicit MouseProfile(const QString &identifier = {}, LoadMode mode = StandardMode);
 
-	void setTitle(const QString &title);
-	void setDescription(const QString &description);
-	void setAuthor(const QString &author);
-	void setVersion(const QString &version);
 	void setDefinitions(const QHash<int, QVector<Gesture> > &definitions);
-	void setModified(bool isModified);
 	QString getName() const override;
-	QString getTitle() const override;
-	QString getDescription() const override;
-	QString getAuthor() const;
-	QString getVersion() const override;
 	QHash<int, QVector<Gesture> > getDefinitions() const;
 	AddonType getType() const override;
-	bool isModified() const;
 	bool isValid() const;
 	bool save();
 
 private:
 	QString m_identifier;
-	QString m_title;
-	QString m_description;
-	QString m_author;
-	QString m_version;
 	QHash<int, QVector<Gesture> > m_definitions;
-	bool m_isModified;
 };
 
 class GesturesManager final : public QObject
@@ -149,7 +134,8 @@ private:
 	static MouseGestures::Recognizer *m_recognizer;
 	static QPointer<QObject> m_trackedObject;
 	static QPoint m_lastClick;
-	static QPoint m_lastPosition;
+	static QPoint m_lastLocalPosition;
+	static QPoint m_lastGlobalPosition;
 	static QVariantMap m_parameters;
 	static QHash<GesturesContext, QVector<MouseProfile::Gesture> > m_gestures;
 	static QHash<GesturesContext, QVector<QVector<MouseProfile::Gesture::Step> > > m_nativeGestures;

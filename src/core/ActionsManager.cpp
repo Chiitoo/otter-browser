@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 - 2015 Piotr Wójcik <chocimier@tlen.pl>
 * Copyright (C) 2015 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
@@ -26,7 +26,6 @@
 
 #include <QtCore/QJsonArray>
 #include <QtCore/QJsonObject>
-#include <QtCore/QTextStream>
 #include <QtGui/QGuiApplication>
 #include <QtGui/QKeySequence>
 
@@ -38,63 +37,35 @@ bool KeyboardProfile::Action::operator ==(const KeyboardProfile::Action &other) 
 	return (action == other.action && shortcuts == other.shortcuts && parameters == other.parameters);
 }
 
-KeyboardProfile::KeyboardProfile(const QString &identifier, LoadMode mode) :
-	m_identifier(identifier),
-	m_isModified(false)
+KeyboardProfile::KeyboardProfile(const QString &identifier, LoadMode mode) : JsonAddon(),
+	m_identifier(identifier)
 {
 	if (identifier.isEmpty())
 	{
 		return;
 	}
 
-	const JsonSettings settings(SessionsManager::getReadableDataPath(QLatin1String("keyboard/") + identifier + QLatin1String(".json")));
-	const QStringList comments(settings.getComment().split(QLatin1Char('\n')));
+	const QString path(SessionsManager::getReadableDataPath(QLatin1String("keyboard/") + identifier + QLatin1String(".json")));
 
-	for (int i = 0; i < comments.count(); ++i)
-	{
-		const QString comment(comments.at(i));
-		const QString key(comment.section(QLatin1Char(':'), 0, 0).trimmed());
-		const QString value(comment.section(QLatin1Char(':'), 1).trimmed());
-
-		if (key == QLatin1String("Title"))
-		{
-			m_title = value;
-		}
-		else if (key == QLatin1String("Description"))
-		{
-			m_description = value;
-		}
-		else if (key == QLatin1String("Author"))
-		{
-			m_author = value;
-		}
-		else if (key == QLatin1String("Version"))
-		{
-			m_version = value;
-		}
-		else if (key == QLatin1String("HomePage"))
-		{
-			m_homePage = QUrl(value);
-		}
-	}
+	loadMetaData(path);
 
 	if (mode == MetaDataOnlyMode)
 	{
 		return;
 	}
 
-	const QJsonArray contextsArray(settings.array());
+	const QJsonArray contextsArray(JsonSettings(path).array());
 	const bool areSingleKeyShortcutsAllowed((mode == FullMode) ? true : SettingsManager::getOption(SettingsManager::Browser_EnableSingleKeyShortcutsOption).toBool());
 
-	for (int i = 0; i < contextsArray.count(); ++i)
+	for (const QJsonValue &contextValue: contextsArray)
 	{
-		const QJsonArray actionsArray(contextsArray.at(i).toObject().value(QLatin1String("actions")).toArray());
+		const QJsonArray actionsArray(contextValue.toObject().value(QLatin1String("actions")).toArray());
 		QVector<Action> definitions;
 		definitions.reserve(actionsArray.count());
 
-		for (int j = 0; j < actionsArray.count(); ++j)
+		for (const QJsonValue &actionValue: actionsArray)
 		{
-			const QJsonObject actionObject(actionsArray.at(j).toObject());
+			const QJsonObject actionObject(actionValue.toObject());
 			const int action(ActionsManager::getActionIdentifier(actionObject.value(QLatin1String("action")).toString()));
 
 			if (action < 0)
@@ -123,64 +94,14 @@ KeyboardProfile::KeyboardProfile(const QString &identifier, LoadMode mode) :
 	}
 }
 
-void KeyboardProfile::setTitle(const QString &title)
-{
-	if (title != m_title)
-	{
-		m_title = title;
-		m_isModified = true;
-	}
-}
-
-void KeyboardProfile::setDescription(const QString &description)
-{
-	if (description != m_description)
-	{
-		m_description = description;
-		m_isModified = true;
-	}
-}
-
-void KeyboardProfile::setAuthor(const QString &author)
-{
-	if (author != m_author)
-	{
-		m_author = author;
-		m_isModified = true;
-	}
-}
-
-void KeyboardProfile::setVersion(const QString &version)
-{
-	if (version != m_version)
-	{
-		m_version = version;
-		m_isModified = true;
-	}
-}
-
 void KeyboardProfile::setDefinitions(const QHash<int, QVector<KeyboardProfile::Action> > &definitions)
 {
 	if (definitions != m_definitions)
 	{
 		m_definitions = definitions;
-		m_isModified = true;
+
+		setModified(true);
 	}
-}
-
-void KeyboardProfile::setMetaData(const MetaData &metaData)
-{
-	setTitle(metaData.title);
-	setDescription(metaData.description);
-	setVersion(metaData.version);
-	setAuthor(metaData.author);
-
-	m_homePage = metaData.homePage;
-}
-
-void KeyboardProfile::setModified(bool isModified)
-{
-	m_isModified = isModified;
 }
 
 QString KeyboardProfile::getName() const
@@ -188,68 +109,31 @@ QString KeyboardProfile::getName() const
 	return m_identifier;
 }
 
-QString KeyboardProfile::getTitle() const
-{
-	return (m_title.isEmpty() ? QCoreApplication::translate("Otter::KeyboardProfile", "(Untitled)") : m_title);
-}
-
-QString KeyboardProfile::getDescription() const
-{
-	return m_description;
-}
-
-QString KeyboardProfile::getAuthor() const
-{
-	return m_author;
-}
-
-QString KeyboardProfile::getVersion() const
-{
-	return m_version;
-}
-
-QUrl KeyboardProfile::getHomePage() const
-{
-	return m_homePage;
-}
-
-Addon::MetaData KeyboardProfile::getMetaData() const
-{
-	Addon::MetaData metaData;
-	metaData.title = getTitle();
-	metaData.description = getDescription();
-	metaData.version = getVersion();
-	metaData.author = getAuthor();
-	metaData.homePage = getHomePage();
-
-	return metaData;
-}
-
 QHash<int, QVector<KeyboardProfile::Action> > KeyboardProfile::getDefinitions() const
 {
 	return m_definitions;
 }
 
-QJsonArray KeyboardProfile::createShortcutsArray(const QVector<QKeySequence> &shortcuts) const
+QJsonArray KeyboardProfile::createShortcutsArray(const QVector<QKeySequence> &shortcuts)
 {
 	QJsonArray array;
 
-	for (int i = 0; i < shortcuts.count(); ++i)
+	for (const QKeySequence &shortcut: shortcuts)
 	{
-		array.append(shortcuts.at(i).toString());
+		array.append(shortcut.toString());
 	}
 
 	return array;
 }
 
-QVector<QKeySequence> KeyboardProfile::loadShortcuts(const QJsonArray &rawShortcuts, bool areSingleKeyShortcutsAllowed) const
+QVector<QKeySequence> KeyboardProfile::loadShortcuts(const QJsonArray &rawShortcuts, bool areSingleKeyShortcutsAllowed)
 {
 	QVector<QKeySequence> shortcuts;
 	shortcuts.reserve(rawShortcuts.count());
 
-	for (int i = 0; i < rawShortcuts.count(); ++i)
+	for (const QJsonValue &rawShortcut: rawShortcuts)
 	{
-		const QKeySequence shortcut(rawShortcuts.at(i).toString());
+		const QKeySequence shortcut(rawShortcut.toString());
 
 		if (!shortcut.isEmpty() && (areSingleKeyShortcutsAllowed || ActionsManager::isShortcutAllowed(shortcut, ActionsManager::DisallowSingleKeyShortcutCheck, false)))
 		{
@@ -260,11 +144,6 @@ QVector<QKeySequence> KeyboardProfile::loadShortcuts(const QJsonArray &rawShortc
 	return shortcuts;
 }
 
-bool KeyboardProfile::isModified() const
-{
-	return m_isModified;
-}
-
 bool KeyboardProfile::isValid() const
 {
 	return !m_identifier.isEmpty();
@@ -273,21 +152,7 @@ bool KeyboardProfile::isValid() const
 bool KeyboardProfile::save()
 {
 	JsonSettings settings(SessionsManager::getWritableDataPath(QLatin1String("keyboard/") + m_identifier + QLatin1String(".json")));
-	QString comment;
-	QTextStream stream(&comment);
-	stream.setCodec("UTF-8");
-	stream << QLatin1String("Title: ") << (m_title.isEmpty() ? QT_TR_NOOP("(Untitled)") : m_title) << QLatin1Char('\n');
-	stream << QLatin1String("Description: ") << m_description << QLatin1Char('\n');
-	stream << QLatin1String("Type: keyboard-profile\n");
-	stream << QLatin1String("Author: ") << m_author << QLatin1Char('\n');
-	stream << QLatin1String("Version: ") << m_version;
-
-	if (m_homePage.isValid())
-	{
-		stream << QLatin1Char('\n') << QLatin1String("HomePage: ") << m_homePage.toString();
-	}
-
-	settings.setComment(comment);
+	settings.setComment(formatComment(QLatin1String("keyboard-profile")));
 
 	QJsonArray contextsArray;
 	QHash<int, QVector<KeyboardProfile::Action> >::const_iterator contextsIterator;
@@ -296,9 +161,8 @@ bool KeyboardProfile::save()
 	{
 		QJsonArray actionsArray;
 
-		for (int i = 0; i < contextsIterator.value().count(); ++i)
+		for (const KeyboardProfile::Action &action: contextsIterator.value())
 		{
-			const KeyboardProfile::Action &action(contextsIterator.value().at(i));
 			QJsonObject actionObject{{QLatin1String("action"), ActionsManager::getActionName(action.action)}, {QLatin1String("shortcuts"), createShortcutsArray(action.shortcuts)}};
 
 			if (!action.disabledShortcuts.isEmpty())
@@ -319,14 +183,14 @@ bool KeyboardProfile::save()
 
 	settings.setArray(contextsArray);
 
-	const bool result(settings.save());
-
-	if (result)
+	if (settings.save())
 	{
-		m_isModified = false;
+		setModified(false);
+
+		return true;
 	}
 
-	return result;
+	return false;
 }
 
 ActionsManager* ActionsManager::m_instance(nullptr);
@@ -573,18 +437,17 @@ void ActionsManager::loadProfiles()
 
 	const QStringList profiles(SettingsManager::getOption(SettingsManager::Browser_KeyboardShortcutsProfilesOrderOption).toStringList());
 	QVector<QKeySequence> allShortcuts;
-	allShortcuts.reserve(50);
+	allShortcuts.reserve(100);
 
-	for (int i = 0; i < profiles.count(); ++i)
+	for (const QString &profile: profiles)
 	{
-		const QHash<int, QVector<KeyboardProfile::Action> > definitions(KeyboardProfile(profiles.at(i)).getDefinitions());
+		const QHash<int, QVector<KeyboardProfile::Action> > definitions(KeyboardProfile(profile).getDefinitions());
 		QHash<int, QVector<KeyboardProfile::Action> >::const_iterator iterator;
 
 		for (iterator = definitions.constBegin(); iterator != definitions.constEnd(); ++iterator)
 		{
-			for (int j = 0; j < iterator.value().count(); ++j)
+			for (const KeyboardProfile::Action &definition: iterator.value())
 			{
-				const KeyboardProfile::Action definition(iterator.value().at(j));
 				QVector<QKeySequence> shortcuts;
 
 				if (definition.parameters.isEmpty() && m_shortcuts.contains(definition.action))
@@ -595,10 +458,8 @@ void ActionsManager::loadProfiles()
 				{
 					const QList<QPair<QVariantMap, QVector<QKeySequence> > > extraDefinitions(m_extraShortcuts.values(definition.action));
 
-					for (int k = 0; k < extraDefinitions.count(); ++k)
+					for (const QPair<QVariantMap, QVector<QKeySequence> > &extraDefinition: extraDefinitions)
 					{
-						const QPair<QVariantMap, QVector<QKeySequence> > extraDefinition(extraDefinitions.at(k));
-
 						if (extraDefinition.first == definition.parameters)
 						{
 							shortcuts = extraDefinition.second;
@@ -611,10 +472,8 @@ void ActionsManager::loadProfiles()
 				shortcuts.reserve(shortcuts.count() + definition.shortcuts.count());
 				allShortcuts.reserve(allShortcuts.count() + definition.shortcuts.count());
 
-				for (int k = 0; k < definition.shortcuts.count(); ++k)
+				for (const QKeySequence &shortcut: definition.shortcuts)
 				{
-					const QKeySequence shortcut(definition.shortcuts.at(k));
-
 					if (!allShortcuts.contains(shortcut))
 					{
 						shortcuts.append(shortcut);
@@ -681,10 +540,8 @@ QVector<QKeySequence> ActionsManager::getActionShortcuts(int identifier, const Q
 	{
 		const QList<QPair<QVariantMap, QVector<QKeySequence> > > definitions(m_extraShortcuts.values(identifier));
 
-		for (int i = 0; i < definitions.count(); ++i)
+		for (const QPair<QVariantMap, QVector<QKeySequence> > &definition: definitions)
 		{
-			const QPair<QVariantMap, QVector<QKeySequence> > definition(definitions.at(i));
-
 			if (definition.first == parameters)
 			{
 				return definition.second;
@@ -745,10 +602,11 @@ DiagnosticReport::Section ActionsManager::createReport()
 		{
 			const QVector<QKeySequence> shortcuts(m_shortcuts[i]);
 			QStringList fields({getActionName(i)});
+			fields.reserve(shortcuts.count());
 
-			for (int j = 0; j < shortcuts.count(); ++j)
+			for (const QKeySequence &shortcut: shortcuts)
 			{
-				fields.append(shortcuts.at(j).toString(QKeySequence::PortableText));
+				fields.append(shortcut.toString(QKeySequence::PortableText));
 			}
 
 			report.entries.append(fields);
@@ -763,14 +621,15 @@ DiagnosticReport::Section ActionsManager::createReport()
 				report.entries.append({getActionName(i)});
 			}
 
-			for (int j = 0; j < definitions.count(); ++j)
+			for (const QPair<QVariantMap, QVector<QKeySequence> > &definition: definitions)
 			{
-				const QVector<QKeySequence> shortcuts(definitions.at(j).second);
-				QStringList fields({QLatin1Char(' ') + QString::fromLatin1(QJsonDocument(QJsonObject::fromVariantMap(definitions.at(j).first)).toJson(QJsonDocument::Compact))});
+				const QVector<QKeySequence> shortcuts(definition.second);
+				QStringList fields({QLatin1Char(' ') + QString::fromLatin1(QJsonDocument(QJsonObject::fromVariantMap(definition.first)).toJson(QJsonDocument::Compact))});
+				fields.reserve(shortcuts.count() + 1);
 
-				for (int k = 0; k < shortcuts.count(); ++k)
+				for (const QKeySequence &shortcut: shortcuts)
 				{
-					fields.append(shortcuts.at(k).toString(QKeySequence::PortableText));
+					fields.append(shortcut.toString(QKeySequence::PortableText));
 				}
 
 				report.entries.append(fields);
@@ -803,9 +662,18 @@ bool ActionsManager::isShortcutAllowed(const QKeySequence &shortcut, ShortcutChe
 		return false;
 	}
 
-	if ((check == AllChecks || check == DisallowSingleKeyShortcutCheck) && (!areSingleKeyShortcutsAllowed && (shortcut[0] == Qt::Key_Plus || !shortcut.toString(QKeySequence::PortableText).contains(QLatin1Char('+'))) && shortcut[0] != Qt::Key_Delete && !(shortcut[0] >= Qt::Key_F1 && shortcut[0] <= Qt::Key_F35)))
+	if ((check == AllChecks || check == DisallowSingleKeyShortcutCheck) && !areSingleKeyShortcutsAllowed)
 	{
-		return false;
+#if QT_VERSION >= 0x060000
+		const Qt::Key key(shortcut[0].key());
+#else
+		const int key(shortcut[0]);
+#endif
+
+		if ((key == Qt::Key_Plus || !shortcut.toString(QKeySequence::PortableText).contains(QLatin1Char('+'))) && key != Qt::Key_Delete && (key < Qt::Key_F1 || key > Qt::Key_F35))
+		{
+			return false;
+		}
 	}
 
 	if (check == AllChecks || check == DisallowStandardShortcutCheck)

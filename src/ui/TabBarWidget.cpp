@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 Piotr Wójcik <chocimier@tlen.pl>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -36,10 +36,10 @@
 #include <QtCore/QtMath>
 #include <QtGui/QContextMenuEvent>
 #include <QtGui/QDrag>
+#include <QtGui/QScreen>
 #include <QtGui/QStatusTipEvent>
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QCheckBox>
-#include <QtWidgets/QDesktopWidget>
 #include <QtWidgets/QMenu>
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QStyleOption>
@@ -117,6 +117,7 @@ void TabHandleWidget::paintEvent(QPaintEvent *event)
 	}
 
 	QPainter painter(this);
+	const WebWidget::LoadingState loadingState(m_window->getLoadingState());
 
 	if (m_closeButtonRectangle.isValid())
 	{
@@ -132,7 +133,7 @@ void TabHandleWidget::paintEvent(QPaintEvent *event)
 		else
 		{
 			QStyleOption option;
-			option.init(this);
+			option.initFrom(this);
 			option.rect = m_closeButtonRectangle;
 			option.state = (QStyle::State_Enabled | QStyle::State_AutoRaise);
 
@@ -152,13 +153,18 @@ void TabHandleWidget::paintEvent(QPaintEvent *event)
 
 	if (m_urlIconRectangle.isValid())
 	{
-		if (m_window->getLoadingState() == WebWidget::OngoingLoadingState && m_spinnerAnimation)
+		if (loadingState == WebWidget::OngoingLoadingState && m_spinnerAnimation)
 		{
 			m_spinnerAnimation->paint(&painter, m_urlIconRectangle);
 		}
 		else
 		{
 			m_window->getIcon().paint(&painter, m_urlIconRectangle);
+
+			if (loadingState == WebWidget::CrashedLoadingState)
+			{
+				ThemesManager::getStyle()->drawIconOverlay(m_urlIconRectangle, ThemesManager::createIcon(QLatin1String("emblem-crashed")), &painter);
+			}
 		}
 	}
 
@@ -172,7 +178,7 @@ void TabHandleWidget::paintEvent(QPaintEvent *event)
 
 			if (m_thumbnailRectangle.height() >= 16 && m_thumbnailRectangle.width() >= 16)
 			{
-				if (m_window->getLoadingState() == WebWidget::OngoingLoadingState && m_spinnerAnimation)
+				if (loadingState == WebWidget::OngoingLoadingState && m_spinnerAnimation)
 				{
 					m_spinnerAnimation->paint(&painter, {(m_thumbnailRectangle.left() + ((m_thumbnailRectangle.width() - 16) / 2)), (m_thumbnailRectangle.top() + ((m_thumbnailRectangle.height() - 16) / 2)), 16, 16});
 				}
@@ -206,7 +212,7 @@ void TabHandleWidget::paintEvent(QPaintEvent *event)
 
 		painter.save();
 
-		if (m_window->getLoadingState() == WebWidget::DeferredLoadingState)
+		if (loadingState == WebWidget::DeferredLoadingState)
 		{
 			painter.setOpacity(0.75);
 		}
@@ -725,7 +731,11 @@ void TabBarWidget::paintEvent(QPaintEvent *event)
 	ThemesManager::getStyle()->drawDropZone((isHorizontal() ? QLine(lineOffset, 0, lineOffset, height()) : QLine(0, lineOffset, width(), lineOffset)), &painter);
 }
 
+#if QT_VERSION >= 0x060000
+void TabBarWidget::enterEvent(QEnterEvent *event)
+#else
 void TabBarWidget::enterEvent(QEvent *event)
+#endif
 {
 	QTabBar::enterEvent(event);
 
@@ -880,7 +890,7 @@ void TabBarWidget::mouseMoveEvent(QMouseEvent *event)
 	{
 		m_isDraggingTab = false;
 
-		QMouseEvent mouseEvent(QEvent::MouseButtonRelease, event->pos(), Qt::LeftButton, Qt::LeftButton, event->modifiers());
+		QMouseEvent mouseEvent(QEvent::MouseButtonRelease, event->pos(), event->globalPos(), Qt::LeftButton, Qt::LeftButton, event->modifiers());
 
 		QApplication::sendEvent(this, &mouseEvent);
 
@@ -1284,7 +1294,7 @@ void TabBarWidget::showPreview(int index, int delay)
 		// of a current screen rectangle. Because top left point of current screen could
 		// have coordinates (-1366, 250) instead of (0, 0).
 		///TODO: Calculate screen rectangle based on current mouse pointer position
-		const QRect screen(QApplication::desktop()->screenGeometry(this));
+		const QRect screenGeometry(screen()->geometry());
 		QRect rectangle(tabRect(index));
 		rectangle.moveTo(mapToGlobal(rectangle.topLeft()));
 
@@ -1295,31 +1305,31 @@ void TabBarWidget::showPreview(int index, int delay)
 		switch (shape())
 		{
 			case QTabBar::RoundedEast:
-				position = {(rectangle.left() - m_previewWidget->width()), qMax(screen.top(), ((rectangle.bottom() - (rectangle.height() / 2)) - (m_previewWidget->height() / 2)))};
+				position = {(rectangle.left() - m_previewWidget->width()), qMax(screenGeometry.top(), ((rectangle.bottom() - (rectangle.height() / 2)) - (m_previewWidget->height() / 2)))};
 
 				break;
 			case QTabBar::RoundedWest:
-				position = {rectangle.right(), qMax(screen.top(), ((rectangle.bottom() - (rectangle.height() / 2)) - (m_previewWidget->height() / 2)))};
+				position = {rectangle.right(), qMax(screenGeometry.top(), ((rectangle.bottom() - (rectangle.height() / 2)) - (m_previewWidget->height() / 2)))};
 
 				break;
 			case QTabBar::RoundedSouth:
-				position = {qMax(screen.left(), ((rectangle.right() - (rectangle.width() / 2)) - (m_previewWidget->width() / 2))), (rectangle.top() - m_previewWidget->height())};
+				position = {qMax(screenGeometry.left(), ((rectangle.right() - (rectangle.width() / 2)) - (m_previewWidget->width() / 2))), (rectangle.top() - m_previewWidget->height())};
 
 				break;
 			default:
-				position = {qMax(screen.left(), ((rectangle.right() - (rectangle.width() / 2)) - (m_previewWidget->width() / 2))), rectangle.bottom()};
+				position = {qMax(screenGeometry.left(), ((rectangle.right() - (rectangle.width() / 2)) - (m_previewWidget->width() / 2))), rectangle.bottom()};
 
 				break;
 		}
 
-		if ((position.x() + m_previewWidget->width()) > screen.right())
+		if ((position.x() + m_previewWidget->width()) > screenGeometry.right())
 		{
-			position.setX(screen.right() - m_previewWidget->width());
+			position.setX(screenGeometry.right() - m_previewWidget->width());
 		}
 
-		if ((position.y() + m_previewWidget->height()) > screen.bottom())
+		if ((position.y() + m_previewWidget->height()) > screenGeometry.bottom())
 		{
-			position.setY(screen.bottom() - m_previewWidget->height());
+			position.setY(screenGeometry.bottom() - m_previewWidget->height());
 		}
 
 		if (m_previewWidget->isVisible())

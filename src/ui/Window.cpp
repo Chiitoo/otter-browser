@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2015 Piotr Wójcik <chocimier@tlen.pl>
 * Copyright (C) 2016 - 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
@@ -345,7 +345,7 @@ void Window::setUrl(const QUrl &url, bool isTypedIn)
 		}
 	}
 
-	const bool isRestoring(!m_contentsWidget && m_session.history.index >= 0);
+	const bool isRestoring(!m_contentsWidget && m_session.history.isValid());
 
 	if (!newWidget && (!m_contentsWidget || m_contentsWidget->getType() != QLatin1String("web")))
 	{
@@ -356,6 +356,8 @@ void Window::setUrl(const QUrl &url, bool isTypedIn)
 	{
 		if (m_contentsWidget && !m_contentsWidget->close())
 		{
+			newWidget->deleteLater();
+
 			return;
 		}
 
@@ -438,7 +440,7 @@ void Window::setContentsWidget(ContentsWidget *widget)
 
 	layout()->addWidget(m_contentsWidget);
 
-	if (m_session.history.index >= 0 || !m_contentsWidget->getWebWidget() || m_contentsWidget->getWebWidget()->getRequestedUrl().isEmpty())
+	if (m_session.history.isValid() || !m_contentsWidget->getWebWidget() || m_contentsWidget->getWebWidget()->getRequestedUrl().isEmpty())
 	{
 		m_contentsWidget->setHistory(m_session.history);
 		m_contentsWidget->setZoom(m_session.getZoom());
@@ -446,7 +448,7 @@ void Window::setContentsWidget(ContentsWidget *widget)
 
 	if (isActive())
 	{
-		if (m_session.history.index >= 0)
+		if (m_session.history.isValid())
 		{
 			m_contentsWidget->setFocus();
 		}

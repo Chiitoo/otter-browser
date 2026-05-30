@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2017 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2017 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -50,7 +50,6 @@ JsonSettings::JsonSettings(const QString &path) :
 
 		QStringList comment;
 		QTextStream stream(&file);
-		stream.setCodec("UTF-8");
 
 		while (!stream.atEnd())
 		{
@@ -239,13 +238,11 @@ bool JsonSettings::save(const QString &path, bool isAtomic)
 	if (!m_comment.isEmpty())
 	{
 		QTextStream stream(file);
-		stream.setCodec("UTF-8");
-
 		const QStringList comment(m_comment.split(QLatin1Char('\n')));
 
-		for (int i = 0; i < comment.count(); ++i)
+		for (const QString &line: comment)
 		{
-			stream << QLatin1String("// ") << comment.at(i) << QLatin1Char('\n');
+			stream << QLatin1String("// ") << line << QLatin1Char('\n');
 		}
 
 		stream << QLatin1Char('\n');
@@ -257,7 +254,7 @@ bool JsonSettings::save(const QString &path, bool isAtomic)
 	int lineStartPosition(0);
 	bool isReplacingSpaces(true);
 
-	for (int i = 0; i < data.count(); ++i)
+	for (int i = 0; i < data.length(); ++i)
 	{
 		const char character(data.at(i));
 

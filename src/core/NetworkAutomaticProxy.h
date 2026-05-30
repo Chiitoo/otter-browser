@@ -1,7 +1,7 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
 * Copyright (C) 2014 Jan Bajer aka bajasoft <jbajer@gmail.com>
-* Copyright (C) 2014 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2014 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -74,7 +74,7 @@ protected:
 
 private:
 	QJSEngine m_engine;
-	QJSValue m_findProxy;
+	QJSValue m_findProxyFunction;
 	QString m_path;
 	QHash<QString, QVector<QNetworkProxy> > m_proxies;
 	bool m_isValid;

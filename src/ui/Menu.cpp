@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -25,7 +25,6 @@
 #include "../core/BookmarksManager.h"
 #include "../core/Console.h"
 #include "../core/FeedsManager.h"
-#include "../core/HistoryManager.h"
 #include "../core/NetworkManagerFactory.h"
 #include "../core/NotesManager.h"
 #include "../core/SearchEnginesManager.h"
@@ -35,13 +34,13 @@
 #include "../core/ToolBarsManager.h"
 #include "../core/Utils.h"
 
+#include <QtCore/QFile>
 #include <QtCore/QJsonArray>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QMetaEnum>
 #include <QtCore/QMimeDatabase>
-#include <QtCore/QTextCodec>
 #include <QtGui/QMouseEvent>
-#include <QtWidgets/QDesktopWidget>
+#include <QtGui/QScreen>
 
 namespace Otter
 {
@@ -116,7 +115,6 @@ Menu::Menu(int role, QWidget *parent) : QMenu(parent),
 		case BookmarkSelectorMenu:
 			{
 				setTitle(QT_TRANSLATE_NOOP("actions", "Bookmarks"));
-				installEventFilter(this);
 
 				const Menu *parentMenu(qobject_cast<Menu*>(parent));
 
@@ -189,10 +187,8 @@ Menu::Menu(int role, QWidget *parent) : QMenu(parent),
 				const ActionExecutor::Object executor(Application::getInstance(), Application::getInstance());
 				const QStringList exchangers({QLatin1String("OperaBookmarksImport"), QLatin1String("HtmlBookmarksImport"), {}, QLatin1String("OpmlFeedsImport"), {}, QLatin1String("OperaNotesImport"), {}, QLatin1String("OperaSearchEnginesImport"), {}, QLatin1String("OperaSessionImport"), {}, QLatin1String("HtmlBookmarksExport"), QLatin1String("XbelBookmarksExport")});
 
-				for (int i = 0; i < exchangers.count(); ++i)
+				for (const QString &exchanger: exchangers)
 				{
-					const QString exchanger(exchangers.at(i));
-
 					if (exchanger.isEmpty())
 					{
 						addSeparator();
@@ -213,7 +209,7 @@ Menu::Menu(int role, QWidget *parent) : QMenu(parent),
 
 				if (!parentMenu || parentMenu->getRole() != m_role)
 				{
-					connect(NotesManager::getModel(), &BookmarksModel::modelModified, this, &Menu::clearBookmarksMenu);
+					connect(NotesManager::getModel(), &BookmarksModel::modelModified, this, &Menu::clearNotesMenu);
 				}
 
 				connect(this, &Menu::aboutToShow, this, &Menu::populateNotesMenu);
@@ -416,9 +412,8 @@ void Menu::load(const QJsonObject &definition, const QStringList &includeSection
 
 	const QJsonArray actions(definition.value(QLatin1String("actions")).toArray());
 
-	for (int i = 0; i < actions.count(); ++i)
+	for (const QJsonValue &action: actions)
 	{
-		const QJsonValue action(actions.at(i));
 		const QJsonObject object(action.toObject());
 
 		if (!action.isObject() || object.value(QLatin1String("type")) != QLatin1String("include"))
@@ -429,9 +424,9 @@ void Menu::load(const QJsonObject &definition, const QStringList &includeSection
 		{
 			const QJsonArray subActions(object.value(QLatin1String("actions")).toArray());
 
-			for (int j = 0; j < subActions.count(); ++j)
+			for (const QJsonValue &subAction: subActions)
 			{
-				appendAction(subActions.at(j), includeSections, executor);
+				appendAction(subAction, includeSections, executor);
 			}
 		}
 	}
@@ -581,9 +576,9 @@ void Menu::appendAction(const QJsonValue &definition, const QStringList &section
 		{
 			const QJsonArray actions(object.value(QLatin1String("actions")).toArray());
 
-			for (int i = 0; i < actions.count(); ++i)
+			for (const QJsonValue &action: actions)
 			{
-				appendAction(actions.at(i), sections, executor);
+				appendAction(action, sections, executor);
 			}
 		}
 		else if (type == QLatin1String("menu"))
@@ -790,10 +785,8 @@ void Menu::populateOptionMenu()
 
 	if (m_actionGroup)
 	{
-		for (int i = 0; i < actions().count(); ++i)
+		for (QAction *action: actions())
 		{
-			QAction *action(actions().at(i));
-
 			if (action && action->data().toString() == value)
 			{
 				action->setChecked(true);
@@ -815,9 +808,8 @@ void Menu::populateOptionMenu()
 	m_actionGroup = new QActionGroup(this);
 	m_actionGroup->setExclusive(true);
 
-	for (int i = 0; i < choices.count(); ++i)
+	for (const SettingsManager::OptionDefinition::Choice &choice: choices)
 	{
-		const SettingsManager::OptionDefinition::Choice choice(choices.at(i));
 		QString text;
 
 		if (choice.value == QLatin1String("ask"))
@@ -905,8 +897,6 @@ void Menu::populateCharacterEncodingMenu()
 {
 	if (!m_actionGroup)
 	{
-		const QVector<int> textCodecs({106, 1015, 1017, 4, 5, 6, 7, 8, 82, 10, 85, 12, 13, 109, 110, 112, 2250, 2251, 2252, 2253, 2254, 2255, 2256, 2257, 2258, 18, 39, 17, 38, 2026});
-
 		m_actionGroup = new QActionGroup(this);
 		m_actionGroup->setExclusive(true);
 
@@ -919,17 +909,12 @@ void Menu::populateCharacterEncodingMenu()
 		addAction(defaultAction);
 		addSeparator();
 
-		for (int i = 0; i < textCodecs.count(); ++i)
+		const QStringList encodings(Utils::getCharacterEncodings());
+
+		for (const QString &encoding: encodings)
 		{
-			const QTextCodec *codec(QTextCodec::codecForMib(textCodecs.at(i)));
-
-			if (!codec)
-			{
-				continue;
-			}
-
-			QAction *textCodecAction(addAction(Utils::elideText(QString::fromLatin1(codec->name()), fontMetrics(), this)));
-			textCodecAction->setData(codec->name().toLower());
+			QAction *textCodecAction(addAction(Utils::elideText(encoding, fontMetrics(), this)));
+			textCodecAction->setData(encoding.toLower());
 			textCodecAction->setCheckable(true);
 
 			m_actionGroup->addAction(textCodecAction);
@@ -975,18 +960,19 @@ void Menu::populateClosedWindowsMenu()
 	if (!windows.isEmpty())
 	{
 		ActionExecutor::Object executor(Application::getInstance(), Application::getInstance());
+		int index(-1);
 
-		for (int i = 0; i < windows.count(); ++i)
+		for (const QString &window: windows)
 		{
 			QVariantMap parameters;
 
-			if (i > 0)
+			if (++index > 0)
 			{
-				parameters[QLatin1String("index")] = i;
+				parameters[QLatin1String("index")] = index;
 			}
 
 			Action *reopenWindowAction(new MenuAction(ActionsManager::ReopenWindowAction, parameters, executor, this));
-			reopenWindowAction->setTextOverride(tr("Window - %1").arg(windows.at(i)), false);
+			reopenWindowAction->setTextOverride(tr("Window - %1").arg(window), false);
 
 			addAction(reopenWindowAction);
 		}
@@ -1005,17 +991,17 @@ void Menu::populateClosedWindowsMenu()
 		if (!tabs.isEmpty())
 		{
 			ActionExecutor::Object executor(mainWindow, mainWindow);
+			int index(-1);
 
-			for (int i = 0; i < tabs.count(); ++i)
+			for (const Session::ClosedWindow &tab: tabs)
 			{
 				QVariantMap parameters;
 
-				if (i > 0)
+				if (++index > 0)
 				{
-					parameters = {{QLatin1String("index"), i}};
+					parameters = {{QLatin1String("index"), index}};
 				}
 
-				const Session::ClosedWindow tab(tabs.at(i));
 				Action *reopenTabAction(new MenuAction(ActionsManager::ReopenTabAction, parameters, executor, this));
 				reopenTabAction->setTextOverride(tab.window.getTitle(), false);
 
@@ -1052,14 +1038,6 @@ void Menu::populateDictionariesMenu()
 {
 	clear();
 
-	if (m_actionGroup)
-	{
-		m_actionGroup->deleteLater();
-	}
-
-	m_actionGroup = new QActionGroup(this);
-	m_actionGroup->setExclusive(true);
-
 	WebWidget *webWidget(nullptr);
 
 	if (m_executor.isValid())
@@ -1072,15 +1050,11 @@ void Menu::populateDictionariesMenu()
 		}
 	}
 
-	const QVector<SpellCheckManager::DictionaryInformation> dictionaries(webWidget ? webWidget->getDictionaries() : SpellCheckManager::getDictionaries());
+	const QVector<SpellCheckManager::Dictionary> dictionaries(webWidget ? webWidget->getDictionaries() : SpellCheckManager::getDictionaries());
 
-	for (int i = 0; i < dictionaries.count(); ++i)
+	for (const SpellCheckManager::Dictionary &dictionary: dictionaries)
 	{
-		Action *action(new MenuAction(ActionsManager::CheckSpellingAction, {{QLatin1String("dictionary"), dictionaries.at(i).language}}, m_executor, this));
-
-		addAction(action);
-
-		m_actionGroup->addAction(action);
+		addAction(new MenuAction(ActionsManager::CheckSpellingAction, {{QLatin1String("dictionary"), dictionary.language}}, m_executor, this));
 	}
 }
 
@@ -1216,10 +1190,10 @@ void Menu::populateOpenInApplicationMenu()
 	}
 	else
 	{
-		for (int i = 0; i < applications.count(); ++i)
-		{
-			const ApplicationInformation application(applications.at(i));
+		bool hasSeparator(false);
 
+		for (const ApplicationInformation &application: applications)
+		{
 			parameters[QLatin1String("application")] = application.command;
 
 			const bool hasValidName(!application.name.isEmpty());
@@ -1229,9 +1203,11 @@ void Menu::populateOpenInApplicationMenu()
 
 			addAction(new MenuAction(ActionsManager::OpenUrlAction, parameters, executor, this));
 
-			if (i == 0)
+			if (!hasSeparator)
 			{
 				addSeparator();
+
+				hasSeparator = true;
 			}
 		}
 	}
@@ -1347,14 +1323,13 @@ void Menu::populateSessionsMenu()
 	const QList<SessionInformation> sorted(information.values());
 	const QString currentSession(SessionsManager::getCurrentSession());
 
-	for (int i = 0; i < sorted.count(); ++i)
+	for (const SessionInformation &session: sorted)
 	{
-		const SessionInformation session(sorted.at(i));
 		int windows(0);
 
-		for (int j = 0; j < session.windows.count(); ++j)
+		for (const Session::MainWindow &mainWindow: session.windows)
 		{
-			windows += session.windows.at(j).windows.count();
+			windows += mainWindow.windows.count();
 		}
 
 		QAction *action(addAction(tr("%1 (%n tab(s))", "", windows).arg(session.title.isEmpty() ? tr("(Untitled)") : QString(session.title).replace(QLatin1Char('&'), QLatin1String("&&")))));
@@ -1380,10 +1355,8 @@ void Menu::populateSpellCheckSuggestionsMenu()
 	const QString misspelledWord(context.webWidget->getMisspelledWord());
 	const QStringList suggestions(context.webWidget->getSpellCheckerSuggestions());
 
-	for (int i = 0; i < suggestions.count(); ++i)
+	for (const QString &suggestion: suggestions)
 	{
-		const QString suggestion(suggestions.at(i));
-
 		addAction(suggestion, context.webWidget, [=]()
 		{
 			context.webWidget->replaceMisspelledWord(suggestion);
@@ -1450,9 +1423,8 @@ void Menu::populateStyleSheetsMenu()
 	actionGroup->setExclusive(true);
 	actionGroup->addAction(defaultAction);
 
-	for (int i = 0; i < styleSheets.count(); ++i)
+	for (const QString &styleSheet: styleSheets)
 	{
-		const QString styleSheet(styleSheets.at(i));
 		QAction *action(addAction(styleSheet));
 		action->setCheckable(true);
 		action->setChecked(styleSheet == activeStyleSheet);
@@ -1470,9 +1442,9 @@ void Menu::populateToolBarsMenu()
 	const ActionExecutor::Object executor(getExecutor());
 	const QVector<ToolBarsManager::ToolBarDefinition> definitions(ToolBarsManager::getToolBarDefinitions());
 
-	for (int i = 0; i < definitions.count(); ++i)
+	for (const ToolBarsManager::ToolBarDefinition &definition: definitions)
 	{
-		addAction(new MenuAction(ActionsManager::ShowToolBarAction, {{QLatin1String("toolBar"), ToolBarsManager::getToolBarName(definitions.at(i).identifier)}}, executor, this));
+		addAction(new MenuAction(ActionsManager::ShowToolBarAction, {{QLatin1String("toolBar"), ToolBarsManager::getToolBarName(definition.identifier)}}, executor, this));
 	}
 
 	addSeparator();
@@ -1526,10 +1498,8 @@ void Menu::populateUserAgentMenu()
 	m_actionGroup = new QActionGroup(this);
 	m_actionGroup->setExclusive(true);
 
-	for (int i = 0; i < userAgents.count(); ++i)
+	for (const QString &userAgent: userAgents)
 	{
-		const QString userAgent(userAgents.at(i));
-
 		if (userAgent.isEmpty())
 		{
 			addSeparator();
@@ -1761,9 +1731,9 @@ bool Menu::hasIncludeMatch(const QJsonObject &definition, const QString &key, co
 	const QJsonValue value(definition.value(key));
 	const QStringList values((value.type() == QJsonValue::Array) ? value.toVariant().toStringList() : QStringList(value.toString()));
 
-	for (int i = 0; i < values.count(); ++i)
+	for (const QString &value: values)
 	{
-		if (sections.contains(values.at(i)))
+		if (sections.contains(value))
 		{
 			return true;
 		}
@@ -1812,7 +1782,7 @@ void MenuAction::setState(const ActionsManager::ActionDefinition::State &state)
 	if (!shortcut().isEmpty())
 	{
 		const int shortcutWidth(m_menu->fontMetrics().boundingRect(QLatin1Char('X') + shortcut().toString(QKeySequence::NativeText)).width());
-		const int availableWidth(QApplication::desktop()->screenGeometry(m_menu).width() / 4);
+		const int availableWidth(m_menu->screen()->geometry().width() / 4);
 
 		if (shortcutWidth < availableWidth)
 		{

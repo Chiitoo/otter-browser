@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 - 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -242,51 +242,6 @@ QtWebKitPage::~QtWebKitPage()
 	m_popups.clear();
 }
 
-void QtWebKitPage::validatePopup(const QUrl &url)
-{
-	QtWebKitPage *page(qobject_cast<QtWebKitPage*>(sender()));
-
-	if (page)
-	{
-		m_popups.removeAll(page);
-
-		page->deleteLater();
-	}
-
-	const QVector<int> profiles(ContentFiltersManager::getProfileIdentifiers(getOption(SettingsManager::ContentBlocking_ProfilesOption).toStringList()));
-
-	if (!profiles.isEmpty())
-	{
-		const ContentFiltersManager::CheckResult result(ContentFiltersManager::checkUrl(profiles, mainFrame()->url(), url, NetworkManager::PopupType));
-
-		if (result.isBlocked)
-		{
-			Console::addMessage(QCoreApplication::translate("main", "Request blocked by rule from profile %1:\n%2").arg(ContentFiltersManager::getProfile(result.profile)->getTitle(), result.rule), Console::NetworkCategory, Console::LogLevel, url.url(), -1, (m_widget ? m_widget->getWindowIdentifier() : 0));
-
-			return;
-		}
-	}
-
-	const QString popupsPolicy(getOption(SettingsManager::Permissions_ScriptsCanOpenWindowsOption).toString());
-
-	if (popupsPolicy == QLatin1String("ask"))
-	{
-		emit requestedPopupWindow(mainFrame()->url(), url);
-	}
-	else
-	{
-		SessionsManager::OpenHints hints(SessionsManager::NewTabOpen);
-
-		if (popupsPolicy == QLatin1String("openAllInBackground"))
-		{
-			hints |= SessionsManager::BackgroundOpen;
-		}
-
-		QtWebKitWebWidget *widget(createWidget(hints));
-		widget->setUrl(url);
-	}
-}
-
 void QtWebKitPage::saveState(QWebFrame *frame, QWebHistoryItem *item)
 {
 	if (!m_widget || frame != mainFrame())
@@ -518,7 +473,46 @@ QWebPage* QtWebKitPage::createWindow(WebWindowType type)
 			QtWebKitPage *page(new QtWebKitPage());
 			page->markAsPopup();
 
-			connect(page, &QtWebKitPage::aboutToNavigate, this, &QtWebKitPage::validatePopup);
+			connect(page, &QtWebKitPage::aboutToNavigate, page, [=](const QUrl &url)
+			{
+				m_popups.removeAll(page);
+
+				page->deleteLater();
+
+				const QUrl baseUrl(mainFrame()->url());
+				const QVector<int> profiles(ContentFiltersManager::getProfileIdentifiers(getOption(SettingsManager::ContentBlocking_ProfilesOption).toStringList()));
+
+				if (!profiles.isEmpty())
+				{
+					const ContentFiltersManager::CheckResult result(ContentFiltersManager::checkUrl(profiles, baseUrl, url, NetworkManager::PopupType));
+
+					if (result.isBlocked)
+					{
+						Console::addMessage(QCoreApplication::translate("main", "Request blocked by rule from profile %1:\n%2").arg(ContentFiltersManager::getProfile(result.profile)->getTitle(), result.rule), Console::NetworkCategory, Console::LogLevel, url.url(), -1, (m_widget ? m_widget->getWindowIdentifier() : 0));
+
+						return;
+					}
+				}
+
+				const QString popupsPolicy(getOption(SettingsManager::Permissions_ScriptsCanOpenWindowsOption).toString());
+
+				if (popupsPolicy == QLatin1String("ask"))
+				{
+					emit requestedPopupWindow(baseUrl, url);
+				}
+				else
+				{
+					SessionsManager::OpenHints hints(SessionsManager::NewTabOpen);
+
+					if (popupsPolicy == QLatin1String("openAllInBackground"))
+					{
+						hints |= SessionsManager::BackgroundOpen;
+					}
+
+					WebWidget *widget(createWidget(hints));
+					widget->setUrl(url);
+				}
+			});
 
 			return page;
 		}
@@ -834,7 +828,7 @@ bool QtWebKitPage::extension(Extension extension, const ExtensionOption *option,
 			domain = QLatin1String("HTTP");
 		}
 
-		const QString logMessage(tr("%1 error #%2: %3").arg(domain).arg(errorOption->error).arg(errorOption->errorString));
+		const QString logMessage(tr("%1 error #%2: %3").arg(domain, QString::number(errorOption->error), errorOption->errorString));
 		const quint64 windowIdentifier(m_widget ? m_widget->getWindowIdentifier() : 0);
 
 		if (errorOption->domain == WebKit && (errorOption->error == 102 || errorOption->error == 203))
@@ -891,22 +885,24 @@ bool QtWebKitPage::extension(Extension extension, const ExtensionOption *option,
 		else if (errorOption->domain == QtNetwork && errorOption->error == QNetworkReply::QNetworkReply::ProtocolUnknownError)
 		{
 			const QUrl normalizedUrl(Utils::normalizeUrl(url));
-			const QVector<NetworkManager::ResourceInformation> blockeckedRequests(m_networkManager->getBlockedRequests());
+			const QVector<NetworkManager::ResourceInformation> blockedRequests(m_networkManager->getBlockedRequests());
 			bool isBlockedContent(false);
 
-			for (int i = 0; i < blockeckedRequests.count(); ++i)
+			for (int i = 0; i < blockedRequests.count(); ++i)
 			{
-				if (blockeckedRequests.at(i).resourceType == NetworkManager::MainFrameType && Utils::normalizeUrl(blockeckedRequests.at(i).url) == normalizedUrl)
+				const NetworkManager::ResourceInformation blockedRequest(blockedRequests.at(i));
+
+				if (blockedRequest.resourceType == NetworkManager::MainFrameType && Utils::normalizeUrl(blockedRequest.url) == normalizedUrl)
 				{
 					isBlockedContent = true;
 
 					information.description.clear();
 
-					if (blockeckedRequests.at(i).metaData.contains(NetworkManager::ContentBlockingRuleMetaData))
+					if (blockedRequest.metaData.contains(NetworkManager::ContentBlockingRuleMetaData))
 					{
-						const ContentFiltersProfile *profile(ContentFiltersManager::getProfile(blockeckedRequests.at(i).metaData.value(NetworkManager::ContentBlockingProfileMetaData).toInt()));
+						const ContentFiltersProfile *profile(ContentFiltersManager::getProfile(blockedRequest.metaData.value(NetworkManager::ContentBlockingProfileMetaData).toInt()));
 
-						information.description.append(tr("Request blocked by rule from profile %1:<br>\n%2").arg(profile ? profile->getTitle() : tr("(Unknown)"), QStringLiteral("<span style=\"font-family:monospace;\">%1</span>").arg(blockeckedRequests.at(i).metaData.value(NetworkManager::ContentBlockingRuleMetaData).toString())));
+						information.description.append(tr("Request blocked by rule from profile %1:<br>\n%2").arg((profile ? profile->getTitle() : tr("(Unknown)"), QStringLiteral("<span style=\"font-family:monospace;\">%1</span>"), blockedRequest.metaData.value(NetworkManager::ContentBlockingRuleMetaData).toString())));
 					}
 
 					break;
@@ -935,15 +931,8 @@ bool QtWebKitPage::extension(Extension extension, const ExtensionOption *option,
 		{
 			case ErrorPageInformation::BlockedContentError:
 				{
-					ErrorPageInformation::PageAction goBackAction;
-					goBackAction.name = QLatin1String("goBack");
-					goBackAction.title = QCoreApplication::translate("utils", "Go Back");
-					goBackAction.type = ErrorPageInformation::MainAction;
-
-					ErrorPageInformation::PageAction addExceptionAction;
-					addExceptionAction.name = QLatin1String("addContentBlockingException");
-					addExceptionAction.title = QCoreApplication::translate("utils", "Load Blocked Page");
-					addExceptionAction.type = ErrorPageInformation::AdvancedAction;
+					const ErrorPageInformation::PageAction goBackAction({QLatin1String("goBack"), QCoreApplication::translate("utils", "Go Back"), ErrorPageInformation::MainAction});
+					const ErrorPageInformation::PageAction addExceptionAction({QLatin1String("addContentBlockingException"), QCoreApplication::translate("utils", "Load Blocked Page"), ErrorPageInformation::AdvancedAction});
 
 					information.actions = {goBackAction, addExceptionAction};
 				}
@@ -951,15 +940,8 @@ bool QtWebKitPage::extension(Extension extension, const ExtensionOption *option,
 				break;
 			case ErrorPageInformation::ConnectionInsecureError:
 				{
-					ErrorPageInformation::PageAction goBackAction;
-					goBackAction.name = QLatin1String("goBack");
-					goBackAction.title = QCoreApplication::translate("utils", "Go Back");
-					goBackAction.type = ErrorPageInformation::MainAction;
-
-					ErrorPageInformation::PageAction addExceptionAction;
-					addExceptionAction.name = QLatin1String("addSslErrorException");
-					addExceptionAction.title = QCoreApplication::translate("utils", "Load Insecure Page");
-					addExceptionAction.type = ErrorPageInformation::AdvancedAction;
+					const ErrorPageInformation::PageAction goBackAction({QLatin1String("goBack"), QCoreApplication::translate("utils", "Go Back"), ErrorPageInformation::MainAction});
+					const ErrorPageInformation::PageAction addExceptionAction({QLatin1String("addSslErrorException"), QCoreApplication::translate("utils", "Load Insecure Page"), ErrorPageInformation::AdvancedAction});
 
 					information.actions = {goBackAction, addExceptionAction};
 				}
@@ -967,12 +949,7 @@ bool QtWebKitPage::extension(Extension extension, const ExtensionOption *option,
 				break;
 			default:
 				{
-					ErrorPageInformation::PageAction reloadAction;
-					reloadAction.name = QLatin1String("reloadPage");
-					reloadAction.title = QCoreApplication::translate("utils", "Try Again");
-					reloadAction.type = ErrorPageInformation::MainAction;
-
-					information.actions = {reloadAction};
+					information.actions = {{QLatin1String("reloadPage"), QCoreApplication::translate("utils", "Try Again"), ErrorPageInformation::MainAction}};
 				}
 
 				break;

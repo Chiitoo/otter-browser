@@ -1,7 +1,7 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
 * Copyright (C) 2014 - 2015 Piotr Wójcik <chocimier@tlen.pl>
-* Copyright (C) 2015 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -80,7 +80,7 @@ SidebarWidget::SidebarWidget(ToolBarWidget *parent) : QWidget(parent),
 
 	connect(parent, &ToolBarWidget::toolBarModified, this, &SidebarWidget::updateLayout);
 	connect(parent, &ToolBarWidget::toolBarModified, this, &SidebarWidget::updatePanels);
-	connect(m_resizerWidget, &ResizerWidget::finished, [&]()
+	connect(m_resizerWidget, &ResizerWidget::finished, this, [&]()
 	{
 		ToolBarsManager::ToolBarDefinition definition(m_parentToolBarWidget->getDefinition());
 		const int maximumSize(m_ui->containerWidget->maximumWidth());
@@ -183,16 +183,17 @@ void SidebarWidget::addWebPanel()
 		return;
 	}
 
+	const InputInterpreter::InterpreterResult result(dialog.getResult());
 	QUrl url;
 
-	switch (dialog.getResult().type)
+	switch (result.type)
 	{
 		case InputInterpreter::InterpreterResult::BookmarkType:
-			url = dialog.getResult().bookmark->getUrl();
+			url = result.bookmark->getUrl();
 
 			break;
 		case InputInterpreter::InterpreterResult::UrlType:
-			url = dialog.getResult().url;
+			url = result.url;
 
 			break;
 		default:
@@ -206,35 +207,6 @@ void SidebarWidget::addWebPanel()
 
 		ToolBarsManager::setToolBar(definition);
 	}
-}
-
-void SidebarWidget::choosePanel(bool isChecked)
-{
-	const QAction *action(qobject_cast<QAction*>(sender()));
-
-	if (!action)
-	{
-		return;
-	}
-
-	ToolBarsManager::ToolBarDefinition definition(m_parentToolBarWidget->getDefinition());
-	const QString panel(action->data().toString());
-
-	if (isChecked)
-	{
-		definition.panels.append(panel);
-	}
-	else
-	{
-		definition.panels.removeAll(panel);
-
-		if (panel == definition.currentPanel)
-		{
-			definition.currentPanel.clear();
-		}
-	}
-
-	ToolBarsManager::setToolBar(definition);
 }
 
 void SidebarWidget::selectPanel(const QString &identifier)
@@ -346,7 +318,7 @@ void SidebarWidget::updatePanels()
 		return;
 	}
 
-	qDeleteAll(m_buttons.begin(), m_buttons.end());
+	qDeleteAll(m_buttons);
 
 	m_buttons.clear();
 
@@ -397,14 +369,13 @@ void SidebarWidget::updatePanels()
 
 	for (int i = 0; i < specialPages.count(); ++i)
 	{
-		QAction *action(menu->addAction(getPanelTitle(specialPages.at(i))));
+		const QString specialPage(specialPages.at(i));
+		QAction *action(menu->addAction(getPanelTitle(specialPage)));
 		action->setCheckable(true);
-		action->setChecked(panels.contains(specialPages.at(i)));
-		action->setData(specialPages.at(i));
-		action->setShortcut(ActionsManager::getActionShortcut(ActionsManager::ShowPanelAction, {{QLatin1String("panel"), specialPages.at(i)}}));
+		action->setChecked(panels.contains(specialPage));
+		action->setData(specialPage);
+		action->setShortcut(ActionsManager::getActionShortcut(ActionsManager::ShowPanelAction, {{QLatin1String("panel"), specialPage}}));
 		action->setShortcutContext(Qt::WidgetShortcut);
-
-		connect(action, &QAction::toggled, this, &SidebarWidget::choosePanel);
 	}
 
 	menu->addSeparator();
@@ -437,22 +408,49 @@ void SidebarWidget::updatePanels()
 			selectPanelMenuAction->setCheckable(true);
 			selectPanelMenuAction->setChecked(true);
 			selectPanelMenuAction->setData(panel);
-
-			connect(selectPanelMenuAction, &QAction::toggled, this, &SidebarWidget::choosePanel);
 		}
 
 		m_ui->buttonsLayout->insertWidget(qMax(0, (m_ui->buttonsLayout->count() - 2)), button);
 
-		m_buttons[panels.at(i)] = button;
+		m_buttons[panel] = button;
 
-		connect(selectPanelButtonAction, &QAction::triggered, this, [&]()
+		connect(selectPanelButtonAction, &QAction::triggered, this, [=]()
 		{
-			const QAction *action(qobject_cast<QAction*>(sender()));
+			selectPanel((panel == m_currentPanel) ? QString() : panel);
+		});
+	}
 
-			if (action)
+	const QList<QAction*> actions(menu->actions());
+
+	for (int i = 0; i < actions.count(); ++i)
+	{
+		QAction *action(actions.at(i));
+
+		if (!action->isCheckable())
+		{
+			continue;
+		}
+
+		connect(action, &QAction::toggled, action, [=](bool isChecked)
+		{
+			ToolBarsManager::ToolBarDefinition definition(m_parentToolBarWidget->getDefinition());
+			const QString panel(action->data().toString());
+
+			if (isChecked)
 			{
-				selectPanel((action->data().toString() == m_currentPanel) ? QString() : action->data().toString());
+				definition.panels.append(panel);
 			}
+			else
+			{
+				definition.panels.removeAll(panel);
+
+				if (panel == definition.currentPanel)
+				{
+					definition.currentPanel.clear();
+				}
+			}
+
+			ToolBarsManager::setToolBar(definition);
 		});
 	}
 

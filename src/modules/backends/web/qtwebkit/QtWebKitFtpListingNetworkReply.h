@@ -1,7 +1,7 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
 * Copyright (C) 2014 - 2016 Piotr Wójcik <chocimier@tlen.pl>
-* Copyright (C) 2015 - 2019 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -42,10 +42,11 @@ public:
 public slots:
 	void abort() override;
 
+protected:
+	void sendHeaders(bool isHtml = true);
+
 protected slots:
 	void processCommand(int command, bool isError);
-	void addEntry(const QUrlInfo &entry);
-	void processData();
 
 private:
 	QFtp *m_ftp;

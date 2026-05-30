@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2016 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2016 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2016 - 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -67,7 +67,7 @@ void UserScript::reload()
 		return;
 	}
 
-	QRegularExpression uriExpression(QLatin1String("^.+://.*/.*"));
+	const QRegularExpression uriExpression(QLatin1String("^.+://.*/.*"));
 	uriExpression.optimize();
 
 	QTextStream stream(&file);
@@ -388,7 +388,7 @@ bool UserScript::isEnabledForUrl(const QUrl &url)
 		return false;
 	}
 
-	bool isEnabled(!(m_includeRules.length() > 0 || m_matchRules.length() > 0));
+	bool isEnabled(m_includeRules.isEmpty() && m_matchRules.isEmpty());
 
 	if (checkUrl(url, m_matchRules))
 	{
@@ -424,10 +424,12 @@ bool UserScript::checkUrl(const QUrl &url, const QStringList &rules) const
 			return QRegularExpression(rule.mid(1, rule.length() - 2)).match(url.url()).hasMatch();
 		}
 
+#if QT_VERSION < 0x060000 // qt6: ‘const class QUrl’ has no member named ‘topLevelDomain’
 		if (rule.contains(QLatin1String(".tld"), Qt::CaseInsensitive))
 		{
-			rule.replace(QLatin1String(".tld"), url.topLevelDomain(), Qt::CaseInsensitive);
+			rule.replace(QLatin1String(".tld"), Utils::getTopLevelDomain(url), Qt::CaseInsensitive);
 		}
+#endif
 
 		bool useExactMatch(true);
 

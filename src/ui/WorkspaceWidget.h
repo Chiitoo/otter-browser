@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -93,7 +93,6 @@ protected slots:
 	void handleActiveSubWindowChanged(QMdiSubWindow *subWindow);
 	void handleOptionChanged(int identifier, const QVariant &value);
 	void notifyActionsStateChanged();
-	void showContextMenu(const QPoint &position);
 
 private:
 	MainWindow *m_mainWindow;

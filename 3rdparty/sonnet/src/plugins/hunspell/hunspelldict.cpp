@@ -23,7 +23,6 @@
 
 #include <QFileInfo>
 #include <QDebug>
-#include <QTextCodec>
 #include <QStringBuilder>
 
 using namespace Sonnet;

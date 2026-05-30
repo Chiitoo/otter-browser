@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2015 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -28,6 +28,7 @@
 #include <QtCore/QFile>
 #include <QtCore/QJsonArray>
 #include <QtCore/QJsonObject>
+#include <QtCore/QTimeZone>
 
 namespace Otter
 {
@@ -103,7 +104,7 @@ HistoryModel::HistoryModel(const QString &path, HistoryType type, QObject *paren
 	{
 		const QJsonObject entryObject(historyArray.at(i).toObject());
 		QDateTime dateTime(QDateTime::fromString(entryObject.value(QLatin1String("time")).toString(), Qt::ISODate));
-		dateTime.setTimeSpec(Qt::UTC);
+		dateTime.setTimeZone(QTimeZone::utc());
 
 		addEntry(QUrl(entryObject.value(QLatin1String("url")).toString()), entryObject.value(QLatin1String("title")).toString(), {}, dateTime);
 	}
@@ -139,7 +140,7 @@ void HistoryModel::clearRecentEntries(uint period)
 
 	for (int i = (rowCount() - 1); i >= 0; --i)
 	{
-		if (index(i, 0).data(TimeVisitedRole).toDateTime().secsTo(QDateTime::currentDateTimeUtc()) < (period * 3600))
+		if (index(i, 0).data(TimeVisitedRole).toDateTime().secsTo(QDateTime::currentDateTimeUtc()) < (static_cast<qint64>(period) * 3600))
 		{
 			removeEntry(index(i, 0).data(IdentifierRole).toULongLong());
 		}
@@ -205,9 +206,9 @@ HistoryModel::Entry* HistoryModel::addEntry(const QUrl &url, const QString &titl
 	{
 		const QVector<Entry*> entries(m_urls[Utils::normalizeUrl(url)]);
 
-		for (int i = 0; i < entries.count(); ++i)
+		for (Entry *entry: entries)
 		{
-			removeEntry(entries.at(i)->getIdentifier());
+			removeEntry(entry->getIdentifier());
 		}
 	}
 
@@ -260,9 +261,9 @@ QDateTime HistoryModel::getLastVisitTime(const QUrl &url) const
 	const QVector<Entry*> entries(m_urls.value(normalizedUrl));
 	QDateTime lastVisitTime;
 
-	for (int i = 0; i < entries.count(); ++i)
+	for (Entry *entry: entries)
 	{
-		const QDateTime entryLastVisitTime(entries.at(i)->getTimeVisited());
+		const QDateTime entryLastVisitTime(entry->getTimeVisited());
 
 		if (!lastVisitTime.isValid() || entryLastVisitTime > lastVisitTime)
 		{

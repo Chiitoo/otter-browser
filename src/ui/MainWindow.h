@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 - 2015 Piotr Wójcik <chocimier@tlen.pl>
 * Copyright (C) 2015 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
@@ -26,8 +26,13 @@
 #include "../core/GesturesController.h"
 #include "../core/SessionsManager.h"
 
+#if QT_VERSION >= 0x060000
+#include <QtGui/QShortcut>
+#endif
 #include <QtWidgets/QMainWindow>
+#if QT_VERSION < 0x060000
 #include <QtWidgets/QShortcut>
+#endif
 
 namespace Otter
 {

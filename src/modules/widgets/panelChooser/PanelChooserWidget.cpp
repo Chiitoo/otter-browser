@@ -1,7 +1,7 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
 * Copyright (C) 2015 Piotr Wójcik <chocimier@tlen.pl>
-* Copyright (C) 2015 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -26,22 +26,54 @@
 namespace Otter
 {
 
-PanelChooserWidget::PanelChooserWidget(const ToolBarsManager::ToolBarDefinition::Entry &definition, QWidget *parent) : ToolButtonWidget(definition, parent)
+PanelChooserWidget::PanelChooserWidget(const ToolBarsManager::ToolBarDefinition::Entry &definition, QWidget *parent) : ToolButtonWidget(definition, parent),
+	m_toolBarIdentifier(-1)
 {
-	setMenu(new QMenu(this));
+	const QVariant toolBar(definition.parameters.value(QLatin1String("sidebar")));
+
+	if (!toolBar.isNull())
+	{
+		m_toolBarIdentifier = ((toolBar.type() == QVariant::Int) ? toolBar.toInt() : ToolBarsManager::getToolBarIdentifier(toolBar.toString()));
+	}
+
+	QMenu *menu(new QMenu(this));
+
+	setMenu(menu);
 	setPopupMode(QToolButton::InstantPopup);
 	setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
 	updateText();
 
-	connect(ToolBarsManager::getInstance(), &ToolBarsManager::toolBarModified, this, [&](int identifier)
+	connect(ToolBarsManager::getInstance(), &ToolBarsManager::toolBarModified, this, [=](int identifier)
 	{
-		if (identifier == getSideBarIdentifier())
+		if (identifier == m_toolBarIdentifier)
 		{
 			updateText();
 		}
 	});
-	connect(menu(), &QMenu::aboutToShow, this, &PanelChooserWidget::populateMenu);
-	connect(menu(), &QMenu::triggered, this, &PanelChooserWidget::selectPanel);
+	connect(menu, &QMenu::aboutToShow, this, [=]()
+	{
+		menu->clear();
+
+		if (m_toolBarIdentifier >= 0)
+		{
+			const QStringList panels(ToolBarsManager::getToolBarDefinition(m_toolBarIdentifier).panels);
+
+			for (const QString &panel: panels)
+			{
+				menu->addAction(SidebarWidget::getPanelTitle(panel))->setData(panel);
+			}
+		}
+	});
+	connect(menu, &QMenu::triggered, this, [=](QAction *action)
+	{
+		if (m_toolBarIdentifier >= 0)
+		{
+			ToolBarsManager::ToolBarDefinition definition(ToolBarsManager::getToolBarDefinition(m_toolBarIdentifier));
+			definition.currentPanel = action->data().toString();
+
+			ToolBarsManager::setToolBar(definition);
+		}
+	});
 }
 
 void PanelChooserWidget::changeEvent(QEvent *event)
@@ -54,68 +86,17 @@ void PanelChooserWidget::changeEvent(QEvent *event)
 	}
 }
 
-void PanelChooserWidget::populateMenu()
-{
-	menu()->clear();
-
-	const int identifier(getSideBarIdentifier());
-
-	if (identifier >= 0)
-	{
-		const QStringList panels(ToolBarsManager::getToolBarDefinition(identifier).panels);
-
-		for (int i = 0; i < panels.count(); ++i)
-		{
-			const QString panel(panels.at(i));
-
-			menu()->addAction(SidebarWidget::getPanelTitle(panel))->setData(panel);
-		}
-	}
-}
-
-void PanelChooserWidget::selectPanel(QAction *action)
-{
-	const int identifier(getSideBarIdentifier());
-
-	if (identifier >= 0)
-	{
-		ToolBarsManager::ToolBarDefinition definition(ToolBarsManager::getToolBarDefinition(identifier));
-		definition.currentPanel = action->data().toString();
-
-		ToolBarsManager::setToolBar(definition);
-	}
-}
-
 void PanelChooserWidget::updateText()
 {
-	const int identifier(getSideBarIdentifier());
-
-	if (identifier >= 0)
+	if (m_toolBarIdentifier >= 0)
 	{
-		setText(SidebarWidget::getPanelTitle(ToolBarsManager::getToolBarDefinition(identifier).currentPanel));
+		setText(SidebarWidget::getPanelTitle(ToolBarsManager::getToolBarDefinition(m_toolBarIdentifier).currentPanel));
 	}
 }
 
 QSize PanelChooserWidget::minimumSizeHint() const
 {
 	return {0, 0};
-}
-
-int PanelChooserWidget::getSideBarIdentifier() const
-{
-	const QVariant toolBar(getParameters().value(QLatin1String("sidebar")));
-
-	if (toolBar.isNull())
-	{
-		return -1;
-	}
-
-	if (toolBar.type() == QVariant::Int)
-	{
-		return toolBar.toInt();
-	}
-
-	return ToolBarsManager::getToolBarIdentifier(toolBar.toString());
 }
 
 }

@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -32,21 +32,38 @@
 #include <QtCore/QFileInfo>
 #include <QtCore/QMimeDatabase>
 #include <QtCore/QRegularExpression>
+#if QT_VERSION >= 0x060000
+#include <QtCore5Compat/QTextCodec>
+#else
+#include <QtCore/QTextCodec>
+#endif
 #include <QtCore/QTextStream>
 #include <QtCore/QTime>
 #include <QtCore/QtMath>
 #include <QtGui/QDesktopServices>
 #include <QtGui/QDrag>
+#include <QtGui/QScreen>
+#if QT_VERSION >= 0x060000
+#include <QtNetwork/private/qtldurl_p.h>
+#endif
 #include <QtWidgets/QApplication>
-#include <QtWidgets/QDesktopWidget>
 #include <QtWidgets/QFileDialog>
 #include <QtWidgets/QMessageBox>
+#include <QtWidgets/QToolTip>
 
 namespace Otter
 {
 
 namespace Utils
 {
+
+void removeFiles(const QStringList &paths)
+{
+	for (const QString &path: paths)
+	{
+		QFile::remove(path);
+	}
+}
 
 void runApplication(const QString &command, const QUrl &url)
 {
@@ -93,6 +110,11 @@ void startLinkDrag(const QUrl &url, const QString &title, const QPixmap &pixmap,
 	drag->setMimeData(mimeData);
 	drag->setPixmap(pixmap);
 	drag->exec(Qt::CopyAction);
+}
+
+void showToolTip(const QPoint &position, const QString &text, QWidget *widget, const QRect &rectangle)
+{
+	QToolTip::showText(position, QFontMetrics(QToolTip::font()).elidedText(text, Qt::ElideRight, (widget->screen()->geometry().width() / 2)), widget, rectangle);
 }
 
 QString matchUrl(const QUrl &url, const QString &prefix)
@@ -252,8 +274,6 @@ QString createErrorPage(const ErrorPageInformation &information)
 	file.open(QIODevice::ReadOnly | QIODevice::Text);
 
 	QTextStream stream(&file);
-	stream.setCodec("UTF-8");
-
 	QString mainTemplate(stream.readAll());
 	const QRegularExpression advancedActionsExpression(QLatin1String("<!--advancedActions:begin-->(.*)<!--advancedActions:end-->"), (QRegularExpression::DotMatchesEverythingOption | QRegularExpression::MultilineOption));
 	const QRegularExpression basicActionsExpression(QLatin1String("<!--basicActions:begin-->(.*)<!--basicActions:end-->"), (QRegularExpression::DotMatchesEverythingOption | QRegularExpression::MultilineOption));
@@ -283,9 +303,8 @@ QString createErrorPage(const ErrorPageInformation &information)
 			actions.append(action);
 		}
 
-		for (int i = 0; i < actions.count(); ++i)
+		for (const ErrorPageInformation::PageAction &action: actions)
 		{
-			const ErrorPageInformation::PageAction action(actions.at(i));
 			QString actionHtml(actionTemplate);
 			actionHtml.replace(QLatin1String("{action}"), action.name);
 			actionHtml.replace(QLatin1String("{text}"), action.title);
@@ -345,9 +364,9 @@ QString createErrorPage(const ErrorPageInformation &information)
 		const QString hintTemplate(hintExpression.match(mainTemplate).captured(1));
 		QString hintsHtml;
 
-		for (int i = 0; i < hints.count(); ++i)
+		for (const QString &hint: hints)
 		{
-			hintsHtml.append(QString(hintTemplate).replace(QLatin1String("{hint}"), hints.at(i)));
+			hintsHtml.append(QString(hintTemplate).replace(QLatin1String("{hint}"), hint));
 		}
 
 		mainTemplate.replace(hintExpression, hintsHtml);
@@ -378,7 +397,7 @@ QString elideText(const QString &text, const QFontMetrics &fontMetrics, QWidget 
 {
 	if (widget && maximumWidth < 0)
 	{
-		maximumWidth = (QApplication::desktop()->screenGeometry(widget).width() / 4);
+		maximumWidth = (widget->screen()->geometry().width() / 4);
 	}
 
 	return fontMetrics.elidedText(text, Qt::ElideRight, qMax(minimumWidth, maximumWidth));
@@ -464,7 +483,7 @@ QString formatDateTime(const QDateTime &dateTime, QString format, bool allowFanc
 		format = SettingsManager::getOption(SettingsManager::Interface_DateTimeFormatOption).toString();
 	}
 
-	QLocale locale;
+	const QLocale locale;
 
 	return (format.isEmpty() ? locale.toString(localDateTime, QLocale::ShortFormat) : locale.toString(localDateTime, format));
 }
@@ -473,7 +492,7 @@ QString formatUnit(qint64 value, bool isSpeed, int precision, bool appendRaw)
 {
 	if (value < 0)
 	{
-		return QString(QLatin1Char('?'));
+		return {QLatin1Char('?')};
 	}
 
 	if (value > 1024)
@@ -533,6 +552,27 @@ QString normalizePath(const QString &path)
 	return path;
 }
 
+#if QT_VERSION < 0x060000 // qt6: ‘const class QUrl’ has no member named ‘topLevelDomain’
+QString getTopLevelDomain(const QUrl &url)
+{
+#if QT_VERSION >= 0x060000
+	QStringList subdomains(createSubdomainList(url.host()));
+
+	std::reverse(subdomains.begin(), subdomains.end());
+
+	for (const QString &subdomain: subdomains)
+	{
+		if (qIsEffectiveTLD(subdomain))
+		{
+			return subdomain;
+		}
+	}
+#else
+	return url.topLevelDomain();
+#endif
+}
+#endif
+
 QString getStandardLocation(QStandardPaths::StandardLocation type)
 {
 	const QStringList paths(QStandardPaths::standardLocations(type));
@@ -575,9 +615,9 @@ QUrl normalizeUrl(QUrl url)
 
 QColor createColor(const QUrl &url)
 {
-	QByteArray hash(QCryptographicHash::hash(url.host().toUtf8(), QCryptographicHash::Md5));
+	const QByteArray hash(QCryptographicHash::hash(url.host().toUtf8(), QCryptographicHash::Md5));
 
-	return QColor(hash.at(0), hash.at(1), hash.at(2));
+	return {hash.at(0), hash.at(1), hash.at(2)};
 }
 
 QLocale createLocale(const QString &name)
@@ -587,7 +627,7 @@ QLocale createLocale(const QString &name)
 		return {QLocale::Portuguese, QLocale::Portugal};
 	}
 
-	return {name};
+	return QLocale(name);
 }
 
 QPixmap loadPixmapFromDataUri(const QString &data)
@@ -607,6 +647,25 @@ QFont multiplyFontSize(QFont font, qreal multiplier)
 	}
 
 	return font;
+}
+
+QStringList getCharacterEncodings()
+{
+	const QVector<int> textCodecs({106, 1015, 1017, 4, 5, 6, 7, 8, 82, 10, 85, 12, 13, 109, 110, 112, 2250, 2251, 2252, 2253, 2254, 2255, 2256, 2257, 2258, 18, 39, 17, 38, 2026});
+	QStringList encodings;
+	encodings.reserve(textCodecs.count());
+
+	for (int textCodec: textCodecs)
+	{
+		const QTextCodec *codec(QTextCodec::codecForMib(textCodec));
+
+		if (codec)
+		{
+			encodings.append(QString::fromLatin1(codec->name()));
+		}
+	}
+
+	return encodings;
 }
 
 QStringList getOpenPaths(const QStringList &fileNames, QStringList filters, bool selectMultiple)
@@ -637,6 +696,30 @@ QStringList getOpenPaths(const QStringList &fileNames, QStringList filters, bool
 	}
 
 	return paths;
+}
+
+QStringList createSubdomainList(const QString &domain)
+{
+	QStringList parts(domain.split(QLatin1Char('.')));
+
+	if (parts.count() < 2)
+	{
+		return {domain};
+	}
+
+	const int amount(parts.count() - 1);
+	QStringList subdomain(parts.takeLast());
+	QStringList subdomains;
+	subdomains.reserve(amount);
+
+	for (int i = 0; i < amount; ++i)
+	{
+		subdomain.prepend(parts.takeLast());
+
+		subdomains.append(subdomain.join(QLatin1Char('.')));
+	}
+
+	return subdomains;
 }
 
 QVector<QUrl> extractUrls(const QMimeData *mimeData)
@@ -759,9 +842,36 @@ bool ensureDirectoryExists(const QString &path)
 	return QDir().mkpath(path);
 }
 
+bool isDomainTheSame(const QUrl &firstUrl, const QUrl &secondUrl)
+{
+#if QT_VERSION < 0x060000 // qt6: 'topLevelDomain()' is no more; port to 'qIsEffectiveTLD()'?
+	const QString firstTld(getTopLevelDomain(firstUrl));
+	const QString secondTld(getTopLevelDomain(secondUrl));
+
+	if (firstTld != secondTld)
+	{
+		return false;
+	}
+
+	QString firstDomain(QLatin1Char('.') + firstUrl.host().toLower());
+	firstDomain.remove((firstDomain.length() - firstTld.length()), firstTld.length());
+
+	QString secondDomain(QLatin1Char('.') + secondUrl.host().toLower());
+	secondDomain.remove((secondDomain.length() - secondTld.length()), secondTld.length());
+
+	return firstDomain.section(QLatin1Char('.'), -1) == secondDomain.section(QLatin1Char('.'), -1);
+#endif
+	return false;
+}
+
 bool isUrl(const QString &text)
 {
 	return QRegularExpression(QLatin1String(R"(^[^\s]+\.[^\s]{2,}$)")).match(text).hasMatch();
+}
+
+bool isUrlAmbiguous(const QUrl &url)
+{
+	return (!url.isLocalFile() && url.host(QUrl::FullyEncoded) != url.host(QUrl::FullyDecoded));
 }
 
 bool isUrlEmpty(const QUrl &url)
@@ -786,7 +896,7 @@ QString EnumeratorMapper::mapToName(int value, bool lowercaseFirst) const
 		return {};
 	}
 
-	name.chop(m_suffix.count());
+	name.chop(m_suffix.length());
 
 	if (lowercaseFirst)
 	{

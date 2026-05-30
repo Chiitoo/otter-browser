@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -30,6 +30,7 @@
 #include <QtCore/QFile>
 #include <QtCore/QMimeData>
 #include <QtCore/QSaveFile>
+#include <QtCore/QTimeZone>
 #include <QtWidgets/QMessageBox>
 
 namespace Otter
@@ -184,7 +185,7 @@ QVariant BookmarksModel::Bookmark::data(int role) const
 							const QString text(data(DescriptionRole).toString());
 							const int newLinePosition(text.indexOf(QLatin1Char('\n')));
 
-							if (newLinePosition > 0 && newLinePosition < (text.count() - 1))
+							if (newLinePosition > 0 && newLinePosition < (text.length() - 1))
 							{
 								return text.left(newLinePosition) + QStringLiteral("…");
 							}
@@ -393,10 +394,11 @@ BookmarksModel::BookmarksModel(const QString &path, FormatMode mode, QObject *pa
 	}
 
 	QFile file(path);
+	const bool isNotes(m_mode == NotesMode);
 
 	if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
 	{
-		Console::addMessage(((mode == NotesMode) ? tr("Failed to open notes file: %1") : tr("Failed to open bookmarks file: %1")).arg(file.errorString()), Console::OtherCategory, Console::ErrorLevel, path);
+		Console::addMessage((isNotes ? tr("Failed to open notes file: %1") : tr("Failed to open bookmarks file: %1")).arg(file.errorString()), Console::OtherCategory, Console::ErrorLevel, path);
 
 		return;
 	}
@@ -420,9 +422,9 @@ BookmarksModel::BookmarksModel(const QString &path, FormatMode mode, QObject *pa
 			{
 				m_rootItem->removeRows(0, m_rootItem->rowCount());
 
-				Console::addMessage(((m_mode == NotesMode) ? tr("Failed to load notes file: %1") : tr("Failed to load bookmarks file: %1")).arg(reader.errorString()), Console::OtherCategory, Console::ErrorLevel, path);
+				Console::addMessage((isNotes ? tr("Failed to load notes file: %1") : tr("Failed to load bookmarks file: %1")).arg(reader.errorString()), Console::OtherCategory, Console::ErrorLevel, path);
 
-				QMessageBox::warning(nullptr, tr("Error"), ((m_mode == NotesMode) ? tr("Failed to load notes file.") : tr("Failed to load bookmarks file.")), QMessageBox::Close);
+				QMessageBox::warning(nullptr, tr("Error"), (isNotes ? tr("Failed to load notes file.") : tr("Failed to load bookmarks file.")), QMessageBox::Close);
 
 				return;
 			}
@@ -518,22 +520,22 @@ void BookmarksModel::restoreBookmark(Bookmark *bookmark)
 		return;
 	}
 
-	Bookmark *formerParent(m_trash.contains(bookmark) ? getBookmark(m_trash[bookmark].parent) : m_rootItem);
+	Bookmark *previousParent(m_trash.contains(bookmark) ? getBookmark(m_trash[bookmark].parent) : m_rootItem);
 
-	if (!formerParent || formerParent->getType() != FolderBookmark)
+	if (!previousParent || previousParent->getType() != FolderBookmark)
 	{
-		formerParent = m_rootItem;
+		previousParent = m_rootItem;
 	}
 
 	if (m_trash.contains(bookmark))
 	{
-		formerParent->insertRow(m_trash[bookmark].row, bookmark->parent()->takeRow(bookmark->row()));
+		previousParent->insertRow(m_trash[bookmark].row, bookmark->parent()->takeRow(bookmark->row()));
 
 		m_trash.remove(bookmark);
 	}
 	else
 	{
-		formerParent->appendRow(bookmark->parent()->takeRow(bookmark->row()));
+		previousParent->appendRow(bookmark->parent()->takeRow(bookmark->row()));
 	}
 
 	readdBookmarkUrl(bookmark);
@@ -1006,17 +1008,14 @@ void BookmarksModel::handleFeedModified(Feed *feed)
 	beginResetModel();
 	blockSignals(true);
 
-	for (int i = 0; i < bookmarks.count(); ++i)
+	for (Bookmark *bookmark: bookmarks)
 	{
-		Bookmark *bookmark(bookmarks.at(i));
 		bookmark->removeRows(0, bookmark->rowCount());
 
 		const QVector<Feed::Entry> entries(feed->getEntries());
 
-		for (int j = 0; j < entries.count(); ++j)
+		for (const Feed::Entry &entry: entries)
 		{
-			const Feed::Entry &entry(entries.at(j));
-
 			if (entry.url.isValid())
 			{
 				addBookmark(UrlBookmark, {{UrlRole, entry.url}, {TitleRole, entry.title}, {DescriptionRole, entry.summary}}, bookmark);
@@ -1027,9 +1026,9 @@ void BookmarksModel::handleFeedModified(Feed *feed)
 	blockSignals(false);
 	endResetModel();
 
-	for (int i = 0; i < bookmarks.count(); ++i)
+	for (Bookmark *bookmark: bookmarks)
 	{
-		emit bookmarkModified(bookmarks.at(i));
+		emit bookmarkModified(bookmark);
 	}
 
 	emit modelModified();
@@ -1168,20 +1167,19 @@ BookmarksModel::Bookmark* BookmarksModel::getBookmarkByPath(const QString &path,
 
 	if (path.startsWith(QLatin1Char('#')))
 	{
-		return getBookmark(path.midRef(1).toULongLong());
+		return getBookmark(path.mid(1).toULongLong());
 	}
 
 	Bookmark *bookmark(m_rootItem);
 	const QStringList directories(path.split(QLatin1Char('/'), Qt::SkipEmptyParts));
 
-	for (int i = 0; i < directories.count(); ++i)
+	for (const QString &directory: directories)
 	{
-		const QString directory(directories.at(i));
 		bool hasMatch(false);
 
-		for (int j = 0; j < bookmark->rowCount(); ++j)
+		for (int i = 0; i < bookmark->rowCount(); ++i)
 		{
-			Bookmark *childBookmark(bookmark->getChild(j));
+			Bookmark *childBookmark(bookmark->getChild(i));
 
 			if (childBookmark && childBookmark->getTitle() == directory)
 			{
@@ -1257,14 +1255,14 @@ QMimeData* BookmarksModel::mimeData(const QModelIndexList &indexes) const
 
 	if (indexes.count() == 1)
 	{
-		mimeData->setProperty("x-item-index", indexes.at(0));
-		mimeData->setProperty("x-url-title", indexes.at(0).data(TitleRole).toString());
+		const QModelIndex index(indexes.at(0));
+
+		mimeData->setProperty("x-item-index", index);
+		mimeData->setProperty("x-url-title", index.data(TitleRole).toString());
 	}
 
-	for (int i = 0; i < indexes.count(); ++i)
+	for (const QModelIndex &index: indexes)
 	{
-		const QModelIndex index(indexes.at(i));
-
 		if (index.isValid() && static_cast<BookmarkType>(index.data(TypeRole).toInt()) == UrlBookmark)
 		{
 			texts.append(index.data(UrlRole).toString());
@@ -1281,7 +1279,7 @@ QMimeData* BookmarksModel::mimeData(const QModelIndexList &indexes) const
 QDateTime BookmarksModel::readDateTime(QXmlStreamReader *reader, const QString &attribute)
 {
 	QDateTime dateTime(QDateTime::fromString(reader->attributes().value(attribute).toString(), Qt::ISODate));
-	dateTime.setTimeSpec(Qt::UTC);
+	dateTime.setTimeZone(QTimeZone::utc());
 
 	return dateTime;
 }
@@ -1519,10 +1517,8 @@ bool BookmarksModel::dropMimeData(const QMimeData *data, Qt::DropAction action, 
 	{
 		const QVector<QUrl> urls(Utils::extractUrls(data));
 
-		for (int i = 0; i < urls.count(); ++i)
+		for (const QUrl &url: urls)
 		{
-			const QUrl url(urls.at(i));
-
 			addBookmark(UrlBookmark, {{UrlRole, url}, {TitleRole, (data->property("x-url-title").toString().isEmpty() ? url.toString() : data->property("x-url-title").toString())}}, getBookmark(parent), row);
 		}
 

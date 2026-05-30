@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 Piotr Wójcik <chocimier@tlen.pl>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -88,6 +88,11 @@ public:
 			bool isEmpty() const
 			{
 				return (entries.isEmpty() || (entries.count() == 1 && Utils::isUrlEmpty(QUrl(entries.value(0).url))));
+			}
+
+			bool isValid() const
+			{
+				return (index >= 0);
 			}
 		};
 

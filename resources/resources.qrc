@@ -37,13 +37,14 @@
         <file>icons/theme/badge-remote.png</file>
         <file>icons/theme/badge-secure.png</file>
         <file>icons/theme/badge-unknown.png</file>
+        <file>icons/theme/badge-warning.png</file>
         <file>icons/theme/bookmark-new.png</file>
         <file>icons/theme/bookmarks-organize.png</file>
         <file>icons/theme/bookmark-page-new.png</file>
         <file>icons/theme/bookmark-page-remove.png</file>
         <file>icons/theme/bookmarks.png</file>
         <file>icons/theme/cache.png</file>
-        <file>icons/theme/configuration.png</file>
+        <file>icons/theme/configure-advanced.png</file>
         <file>icons/theme/configure-shortcuts.png</file>
         <file>icons/theme/configure-toolbars.png</file>
         <file>icons/theme/configure.png</file>
@@ -71,6 +72,7 @@
         <file>icons/theme/edit-redo.png</file>
         <file>icons/theme/edit-select-all.png</file>
         <file>icons/theme/edit-undo.png</file>
+        <file>icons/theme/emblem-crashed.png</file>
         <file>icons/theme/feeds.png</file>
         <file>icons/theme/fill-password.png</file>
         <file>icons/theme/go-down.png</file>
@@ -107,7 +109,6 @@
         <file>icons/theme/sidebar-show.png</file>
         <file>icons/theme/tab-close-other.png</file>
         <file>icons/theme/tab-close.png</file>
-        <file>icons/theme/tab-crashed.png</file>
         <file>icons/theme/tab-history.png</file>
         <file>icons/theme/tab-new-private.png</file>
         <file>icons/theme/tab-new.png</file>

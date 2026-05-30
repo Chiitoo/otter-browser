@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -116,8 +116,10 @@ private:
 namespace Utils
 {
 
+void removeFiles(const QStringList &paths);
 void runApplication(const QString &command, const QUrl &url = {});
 void startLinkDrag(const QUrl &url, const QString &title, const QPixmap &pixmap, QObject *parent = nullptr);
+void showToolTip(const QPoint &position, const QString &text, QWidget *widget, const QRect &rectangle);
 QString matchUrl(const QUrl &url, const QString &prefix);
 QString createIdentifier(const QString &source, const QStringList &exclude = {}, bool toLowerCase = true);
 QString createErrorPage(const ErrorPageInformation &information);
@@ -132,6 +134,7 @@ QString formatUnit(qint64 value, bool isSpeed = false, int precision = 1, bool a
 QString formatFileTypes(const QStringList &filters = {});
 QString normalizeObjectName(QString name, const QString &suffix = {});
 QString normalizePath(const QString &path);
+QString getTopLevelDomain(const QUrl &url);
 QString getStandardLocation(QStandardPaths::StandardLocation type);
 QUrl expandUrl(const QUrl &url);
 QUrl normalizeUrl(QUrl url);
@@ -140,12 +143,16 @@ QLocale createLocale(const QString &name);
 QPixmap loadPixmapFromDataUri(const QString &data);
 QFont multiplyFontSize(QFont font, qreal multiplier);
 SaveInformation getSavePath(const QString &fileName, const QString &directory = {}, QStringList filters = {}, bool forceAsk = false);
+QStringList getCharacterEncodings();
 QStringList getOpenPaths(const QStringList &fileNames = {}, QStringList filters = {}, bool selectMultiple = false);
+QStringList createSubdomainList(const QString &domain);
 QVector<QUrl> extractUrls(const QMimeData *mimeData);
 QVector<ApplicationInformation> getApplicationsForMimeType(const QMimeType &mimeType);
 qreal calculatePercent(qint64 amount, qint64 total, int multiplier = 100);
 bool ensureDirectoryExists(const QString &path);
+bool isDomainTheSame(const QUrl &firstUrl, const QUrl &secondUrl);
 bool isUrl(const QString &text);
+bool isUrlAmbiguous(const QUrl &url);
 bool isUrlEmpty(const QUrl &url);
 
 }

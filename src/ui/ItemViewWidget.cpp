@@ -177,7 +177,13 @@ void HeaderViewWidget::contextMenuEvent(QContextMenuEvent *event)
 
 	for (int i = 0; i < model()->columnCount(); ++i)
 	{
-		const QString title(model()->headerData(i, orientation()).toString().isEmpty() ? tr("(Untitled)") : model()->headerData(i, orientation()).toString());
+		QString title(model()->headerData(i, orientation()).toString());
+
+		if (title.isEmpty())
+		{
+			title = tr("(Untitled)");
+		}
+
 		QAction *sortAction(sortMenu->addAction(title));
 		sortAction->setData(i);
 		sortAction->setCheckable(true);
@@ -653,7 +659,7 @@ void ItemViewWidget::currentChanged(const QModelIndex &current, const QModelInde
 {
 	QTreeView::currentChanged(current, previous);
 
-	if (selectionModel() && selectionModel()->hasSelection())
+	if (hasSelection())
 	{
 		if (m_sourceModel)
 		{
@@ -1121,12 +1127,12 @@ QSortFilterProxyModel* ItemViewWidget::getProxyModel() const
 
 QStandardItem* ItemViewWidget::getItem(const QModelIndex &index) const
 {
-	return(m_sourceModel ? m_sourceModel->itemFromIndex(index) : nullptr);
+	return (m_sourceModel ? m_sourceModel->itemFromIndex(index) : nullptr);
 }
 
 QStandardItem* ItemViewWidget::getItem(int row, int column, const QModelIndex &parent) const
 {
-	return(m_sourceModel ? m_sourceModel->itemFromIndex(getIndex(row, column, parent)) : nullptr);
+	return (m_sourceModel ? m_sourceModel->itemFromIndex(getIndex(row, column, parent)) : nullptr);
 }
 
 QModelIndex ItemViewWidget::getCheckedIndex(const QModelIndex &parent) const
@@ -1158,7 +1164,7 @@ QModelIndex ItemViewWidget::getCheckedIndex(const QModelIndex &parent) const
 
 QModelIndex ItemViewWidget::getCurrentIndex(int column) const
 {
-	if (!selectionModel() || !selectionModel()->hasSelection())
+	if (!hasSelection())
 	{
 		return {};
 	}
@@ -1233,7 +1239,7 @@ int ItemViewWidget::getSortColumn() const
 
 int ItemViewWidget::getCurrentRow() const
 {
-	return ((selectionModel() && selectionModel()->hasSelection()) ? currentIndex().row() : -1);
+	return (hasSelection() ? currentIndex().row() : -1);
 }
 
 int ItemViewWidget::getRowCount(const QModelIndex &parent) const

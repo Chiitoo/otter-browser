@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2015 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -30,16 +30,16 @@ class SpellCheckManager final : public QObject
 	Q_OBJECT
 
 public:
-	struct DictionaryInformation final
+	struct Dictionary final
 	{
 		QString language;
 		QString title;
 		QStringList paths;
 		bool isLocalDictionary = true;
 
-		bool isValid()
+		bool isValid() const
 		{
-			return !language.isEmpty();
+			return (!language.isEmpty() && !paths.isEmpty());
 		}
 	};
 
@@ -49,8 +49,8 @@ public:
 	static SpellCheckManager* getInstance();
 	static QString getDefaultDictionary();
 	static QString getDictionariesPath();
-	static DictionaryInformation getDictionary(const QString &language);
-	static QVector<DictionaryInformation> getDictionaries();
+	static Dictionary getDictionary(const QString &language);
+	static QVector<Dictionary> getDictionaries();
 	static QStringList getIgnoredWords();
 	static bool isIgnoringWord(const QString &word);
 	bool event(QEvent *event) override;
@@ -65,7 +65,7 @@ protected:
 private:
 	static SpellCheckManager *m_instance;
 	static QString m_defaultDictionary;
-	static QVector<DictionaryInformation> m_dictionaries;
+	static QVector<Dictionary> m_dictionaries;
 	static QSet<QString> m_ignoredWords;
 
 signals:
@@ -77,7 +77,7 @@ signals:
 class Dictionary final : public QObject, public Addon
 {
 public:
-	explicit Dictionary(const SpellCheckManager::DictionaryInformation &information, QObject *parent);
+	explicit Dictionary(const SpellCheckManager::Dictionary &information, QObject *parent);
 
 	QString getLanguage() const;
 	QString getName() const override;
@@ -89,7 +89,7 @@ public:
 	bool remove() override;
 
 private:
-	SpellCheckManager::DictionaryInformation m_information;
+	SpellCheckManager::Dictionary m_information;
 };
 
 }

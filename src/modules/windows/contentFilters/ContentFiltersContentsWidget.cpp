@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 - 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -19,7 +19,6 @@
 **************************************************************************/
 
 #include "ContentFiltersContentsWidget.h"
-#include "../../../core/ThemesManager.h"
 #include "../../../ui/MainWindow.h"
 #include "../../../ui/Window.h"
 
@@ -32,7 +31,7 @@
 namespace Otter
 {
 
-ContentFiltersContentsWidget::ContentFiltersContentsWidget(const QVariantMap &parameters, Window *window, QWidget *parent) : ActiveWindowObserverContentsWidget(parameters, window, parent),
+ContentFiltersContentsWidget::ContentFiltersContentsWidget(const QVariantMap &parameters, Window *window, QWidget *parent) : ActiveWindowObserverContentsWidget(QLatin1String("contentFilters"), parameters, window, parent),
 	m_isSettingsPageInitialized(false),
 	m_ui(new Ui::ContentFiltersContentsWidget)
 {
@@ -81,11 +80,7 @@ void ContentFiltersContentsWidget::initializeSettingsPage()
 	if (!hosts.isEmpty())
 	{
 		m_ui->hostComboBox->insertSeparator(1);
-
-		for (int i = 0; i < hosts.count(); ++i)
-		{
-			m_ui->hostComboBox->addItem(hosts.at(i));
-		}
+		m_ui->hostComboBox->addItems(hosts);
 	}
 
 	if (isSidebarPanel())
@@ -117,7 +112,7 @@ void ContentFiltersContentsWidget::initializeSettingsPage()
 
 		if (m_ui->profilesViewWidget->areProfilesModified() && host != m_ui->profilesViewWidget->getHost())
 		{
-			const int result(QMessageBox::question(this, tr("Question"), tr("The settings have been changed.\nDo you want to save them?"), QMessageBox::Yes, QMessageBox::No, QMessageBox::Cancel));
+			const int result(QMessageBox::question(this, tr("Question"), tr("The settings have been changed.\nDo you want to save them?"), (QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel), QMessageBox::Cancel));
 
 			if (result == QMessageBox::Cancel)
 			{
@@ -206,29 +201,19 @@ void ContentFiltersContentsWidget::updateActions()
 	}
 }
 
-QString ContentFiltersContentsWidget::getTitle() const
-{
-	return tr("Content Filters");
-}
-
-QLatin1String ContentFiltersContentsWidget::getType() const
-{
-	return QLatin1String("contentFilters");
-}
-
 QUrl ContentFiltersContentsWidget::getUrl() const
 {
-	return QUrl(QLatin1String("about:content-filters"));
-}
+	if (isSidebarPanel())
+	{
+		return {};
+	}
 
-QIcon ContentFiltersContentsWidget::getIcon() const
-{
-	return ThemesManager::createIcon(QLatin1String("content-blocking"), false);
+	return {QLatin1String("about:content-filters")};
 }
 
 bool ContentFiltersContentsWidget::canClose()
 {
-	const int result(QMessageBox::question(this, tr("Question"), tr("The settings have been changed.\nDo you want to save them?"), QMessageBox::Yes, QMessageBox::No, QMessageBox::Cancel));
+	const int result(QMessageBox::question(this, tr("Question"), tr("The settings have been changed.\nDo you want to save them?"), (QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel), QMessageBox::Cancel));
 
 	if (result == QMessageBox::Cancel)
 	{

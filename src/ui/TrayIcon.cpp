@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2015 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -20,7 +20,6 @@
 
 #include "TrayIcon.h"
 #include "Action.h"
-#include "MainWindow.h"
 #include "Menu.h"
 #include "../core/Application.h"
 
@@ -38,16 +37,18 @@ TrayIcon::TrayIcon(Application *parent) : QObject(parent),
 
 	for (int i = 0; i < actions.count(); ++i)
 	{
-		if (actions.at(i) < 0)
+		const int identifier(actions.at(i));
+
+		if (identifier < 0)
 		{
 			menu->addSeparator();
 
 			continue;
 		}
 
-		Action *action(new Action(actions.at(i), {}, executor, menu));
+		Action *action(new Action(identifier, {}, executor, menu));
 
-		switch (actions.at(i))
+		switch (identifier)
 		{
 			case ActionsManager::BookmarksAction:
 				action->setTextOverride(QT_TRANSLATE_NOOP("actions", "Bookmarks"));
@@ -72,14 +73,21 @@ TrayIcon::TrayIcon(Application *parent) : QObject(parent),
 	m_trayIcon->setContextMenu(menu);
 	m_trayIcon->setToolTip(tr("Otter Browser"));
 	m_trayIcon->show();
-	m_trayIcon->installEventFilter(this);
 
 	setParent(nullptr);
 
 	connect(Application::getInstance(), &Application::aboutToQuit, this, &TrayIcon::hide);
 	connect(this, &TrayIcon::destroyed, menu, &Menu::deleteLater);
 	connect(parent, &TrayIcon::destroyed, this, &TrayIcon::deleteLater);
-	connect(menu, &Menu::aboutToShow, this, &TrayIcon::updateMenu);
+	connect(menu, &Menu::aboutToShow, this, [&]()
+	{
+		const QList<QAction*> actions(m_trayIcon->contextMenu()->actions());
+
+		if (!actions.isEmpty())
+		{
+			actions.at(0)->setText(Application::isHidden() ? tr("Show Windows") : tr("Hide Windows"));
+		}
+	});
 	connect(m_trayIcon, &QSystemTrayIcon::activated, this, [&](QSystemTrayIcon::ActivationReason reason)
 	{
 		if (reason == QSystemTrayIcon::Trigger)
@@ -97,7 +105,9 @@ void TrayIcon::timerEvent(QTimerEvent *event)
 
 		m_autoHideTimer = 0;
 
-		handleMessageIgnored();
+		disconnect(m_trayIcon, &QSystemTrayIcon::messageClicked, this, &TrayIcon::handleMessageClicked);
+
+		m_notification->markAsIgnored();
 	}
 }
 
@@ -125,21 +135,6 @@ void TrayIcon::handleMessageClicked()
 	}
 
 	m_notification->markAsClicked();
-}
-
-void TrayIcon::handleMessageIgnored()
-{
-	disconnect(m_trayIcon, &QSystemTrayIcon::messageClicked, this, &TrayIcon::handleMessageClicked);
-
-	m_notification->markAsIgnored();
-}
-
-void TrayIcon::updateMenu()
-{
-	if (!m_trayIcon->contextMenu()->actions().isEmpty())
-	{
-		m_trayIcon->contextMenu()->actions().at(0)->setText(Application::isHidden() ? tr("Show Windows") : tr("Hide Windows"));
-	}
 }
 
 void TrayIcon::showMessage(const Notification::Message &message)
@@ -177,14 +172,14 @@ void TrayIcon::showNotification(Notification *notification)
 	showMessage(notification->getMessage());
 }
 
-bool TrayIcon::eventFilter(QObject *object, QEvent *event)
+bool TrayIcon::event(QEvent *event)
 {
-	if (object == m_trayIcon && event->type() == QEvent::LanguageChange)
+	if (event->type() == QEvent::LanguageChange)
 	{
 		m_trayIcon->setToolTip(tr("Otter Browser"));
 	}
 
-	return QObject::eventFilter(object, event);
+	return QObject::event(event);
 }
 
 }

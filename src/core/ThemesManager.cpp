@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2016 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2016 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -34,6 +34,7 @@
 #include <QtCore/QJsonObject>
 #include <QtGui/QIcon>
 #include <QtWidgets/QWidget>
+#include <QtXml/QDomDocument>
 
 #ifdef Q_OS_WIN32
 #include <windows.h>
@@ -117,10 +118,105 @@ ColorScheme::ColorRoleInformation ColorScheme::getColor(ColorRole role) const
 	return m_colors.value(role);
 }
 
+SvgIconParser::SvgIconParser(const QString &sourceFileName, const QString &outputFileName, const QVector<Rule> &rules) :
+	m_rules(rules),
+	m_hasChanges(false),
+	m_isSuccess(true)
+{
+	QFile sourceFile(sourceFileName);
+
+	if (!sourceFile.open(QIODevice::ReadOnly))
+	{
+		m_isSuccess = false;
+
+		return;
+	}
+
+	QDomDocument document;
+	document.setContent(&sourceFile);
+
+	parseNode(document.documentElement());
+
+	if (m_hasChanges)
+	{
+		QFile outputFile(outputFileName);
+
+		if (!outputFile.open(QIODevice::WriteOnly) || outputFile.write(document.toByteArray(0)) < 0)
+		{
+			m_isSuccess = false;
+
+			return;
+		}
+	}
+	else if (!QFile::copy(sourceFileName, outputFileName))
+	{
+		m_isSuccess = false;
+	}
+}
+
+void SvgIconParser::applyRule(QDomElement element, const Rule &rule, const QString &property)
+{
+	const QString key(rule.type + QLatin1Char('-') + property);
+	const QStringList classes(element.attribute(QLatin1String("class")).split(QLatin1Char(' '), Qt::SkipEmptyParts));
+
+	if (classes.contains(key))
+	{
+		if (element.hasAttribute(property))
+		{
+			element.setAttribute(property, rule.color.name());
+		}
+		else
+		{
+			QString style(element.attribute(QLatin1String("style")));
+
+			if (!style.isEmpty() && !style.trimmed().endsWith(QLatin1Char(';')))
+			{
+				style.append(QLatin1Char(';'));
+			}
+
+			style.append(QStringLiteral("%1:%2;").arg(property, rule.color.name()));
+
+			element.setAttribute(QLatin1String("style"), style);
+		}
+
+		m_hasChanges = true;
+	}
+}
+
+void SvgIconParser::parseNode(const QDomNode &node)
+{
+	if (!node.isElement())
+	{
+		return;
+	}
+
+	QDomElement element(node.toElement());
+
+	for (const Rule &rule: std::as_const(m_rules))
+	{
+		applyRule(element, rule, QLatin1String("fill"));
+		applyRule(element, rule, QLatin1String("stroke"));
+	}
+
+	const QDomNodeList nodes(node.childNodes());
+
+	for (int i = 0; i < nodes.count(); ++i)
+	{
+		parseNode(nodes.at(i));
+	}
+}
+
+bool SvgIconParser::isSuccess() const
+{
+	return m_isSuccess;
+}
+
 ThemesManager* ThemesManager::m_instance(nullptr);
 ColorScheme* ThemesManager::m_colorScheme(nullptr);
 QWidget* ThemesManager::m_probeWidget(nullptr);
 QString ThemesManager::m_iconThemePath(QLatin1String(":/icons/theme/"));
+QFileIconProvider ThemesManager::m_fileIconProvider;
+QMimeDatabase ThemesManager::m_mimeDatabase;
 bool ThemesManager::m_useSystemIconTheme(false);
 
 ThemesManager::ThemesManager(QObject *parent) : QObject(parent)
@@ -273,7 +369,7 @@ QIcon ThemesManager::createIcon(const QString &name, bool fromTheme, IconContext
 
 	if (name.startsWith(QLatin1String("data:image/")))
 	{
-		return QIcon(Utils::loadPixmapFromDataUri(name));
+		return {Utils::loadPixmapFromDataUri(name)};
 	}
 
 	if (m_useSystemIconTheme && fromTheme && QIcon::hasThemeIcon(name))
@@ -298,6 +394,20 @@ QIcon ThemesManager::createIcon(const QString &name, bool fromTheme, IconContext
 	return {};
 }
 
+QIcon ThemesManager::getFileTypeIcon(const QString &path)
+{
+	const QString iconName(m_mimeDatabase.mimeTypeForFile(path).iconName());
+
+	return QIcon::fromTheme(iconName, m_fileIconProvider.icon(QFileInfo(path)));
+}
+
+QIcon ThemesManager::getFileTypeIcon(const QMimeType &mimeType)
+{
+	const QString iconName(mimeType.iconName());
+
+	return QIcon::fromTheme(iconName, m_fileIconProvider.icon(QFileIconProvider::File));
+}
+
 bool ThemesManager::eventFilter(QObject *object, QEvent *event)
 {
 	if (object == m_probeWidget && event->type() == QEvent::StyleChange)
@@ -307,9 +417,9 @@ bool ThemesManager::eventFilter(QObject *object, QEvent *event)
 			const QList<QStyle*> children(QApplication::style()->findChildren<QStyle*>());
 			bool hasMatch(false);
 
-			for (int i = 0; i < children.count(); ++i)
+			for (QStyle *style: children)
 			{
-				if (children.at(i)->inherits("Otter::Style"))
+				if (style->inherits("Otter::Style"))
 				{
 					hasMatch = true;
 
@@ -330,7 +440,11 @@ bool ThemesManager::eventFilter(QObject *object, QEvent *event)
 }
 
 #ifdef Q_OS_WIN32
+#if QT_VERSION < 0x060000
 bool ThemesManager::nativeEventFilter(const QByteArray &eventType, void *message, long *result)
+#else
+bool ThemesManager::nativeEventFilter(const QByteArray &eventType, void *message, qintptr *result)
+#endif
 {
 	Q_UNUSED(eventType)
 	Q_UNUSED(result)

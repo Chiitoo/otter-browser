@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -81,11 +81,11 @@ void ConfigurationOptionDelegate::initStyleOption(QStyleOptionViewItem *option, 
 					option->features |= QStyleOptionViewItem::HasDecoration;
 				}
 
-				for (int i = 0; i < definition.choices.count(); ++i)
+				for (const SettingsManager::OptionDefinition::Choice &choice: definition.choices)
 				{
-					if (definition.choices.at(i).value == value)
+					if (choice.value == value)
 					{
-						option->icon = definition.choices.at(i).icon;
+						option->icon = choice.icon;
 
 						break;
 					}
@@ -155,7 +155,7 @@ QWidget* ConfigurationOptionDelegate::createEditor(QWidget *parent, const QStyle
 	return widget;
 }
 
-ConfigurationContentsWidget::ConfigurationContentsWidget(const QVariantMap &parameters, Window *window, QWidget *parent) : ContentsWidget(parameters, window, parent),
+ConfigurationContentsWidget::ConfigurationContentsWidget(const QVariantMap &parameters, Window *window, QWidget *parent) : SpecialPageContentsWidget(QLatin1String("config"), parameters, window, parent),
 	m_model(new QStandardItemModel(this)),
 	m_ui(new Ui::ConfigurationContentsWidget)
 {
@@ -172,9 +172,8 @@ ConfigurationContentsWidget::ConfigurationContentsWidget(const QVariantMap &para
 	QModelIndex selectedIndex;
 	bool canResetAll(false);
 
-	for (int i = 0; i < options.count(); ++i)
+	for (const QString &name: options)
 	{
-		const QString name(options.at(i));
 		const int identifier(SettingsManager::getOptionIdentifier(name));
 		const SettingsManager::OptionDefinition definition(SettingsManager::getOptionDefinition(identifier));
 
@@ -262,7 +261,7 @@ ConfigurationContentsWidget::ConfigurationContentsWidget(const QVariantMap &para
 			m_ui->configurationViewWidget->setCurrentIndex(index.sibling(index.row(), 3));
 		}
 	});
-	connect(m_ui->configurationViewWidget, &ItemViewWidget::modified, [&]()
+	connect(m_ui->configurationViewWidget, &ItemViewWidget::modified, this, [&]()
 	{
 		m_ui->resetAllButton->setEnabled(true);
 		m_ui->saveAllButton->setEnabled(true);
@@ -280,11 +279,11 @@ ConfigurationContentsWidget::ConfigurationContentsWidget(const QVariantMap &para
 		}
 	});
 	connect(m_ui->filterLineEditWidget, &LineEditWidget::textChanged, m_ui->configurationViewWidget, &ItemViewWidget::setFilterString);
-	connect(m_ui->resetAllButton, &QPushButton::clicked, [&]()
+	connect(m_ui->resetAllButton, &QPushButton::clicked, this, [&]()
 	{
 		saveAll(true);
 	});
-	connect(m_ui->saveAllButton, &QPushButton::clicked, [&]()
+	connect(m_ui->saveAllButton, &QPushButton::clicked, this, [&]()
 	{
 		saveAll(false);
 	});
@@ -362,7 +361,7 @@ void ConfigurationContentsWidget::saveOption()
 
 void ConfigurationContentsWidget::saveAll(bool reset)
 {
-	if (reset && QMessageBox::question(this, tr("Question"), tr("Do you really want to restore default values of all options?"), QMessageBox::Yes, QMessageBox::No) == QMessageBox::No)
+	if (reset && QMessageBox::question(this, tr("Question"), tr("Do you really want to restore default values of all options?"), (QMessageBox::Yes | QMessageBox::No), QMessageBox::No) == QMessageBox::No)
 	{
 		return;
 	}
@@ -471,9 +470,7 @@ void ConfigurationContentsWidget::handleHostOptionChanged(int identifier)
 
 	for (int i = 0; i < optionAmount; ++i)
 	{
-		const QModelIndex valueIndex(m_model->index(i, 3, groupIndex));
-
-		if (valueIndex.data(IdentifierRole).toInt() == identifier)
+		if (m_model->index(i, 3, groupIndex).data(IdentifierRole).toInt() == identifier)
 		{
 			m_model->setData(m_model->index(i, 2, groupIndex), QString::number(SettingsManager::getOverridesCount(identifier)), Qt::DisplayRole);
 
@@ -548,26 +545,6 @@ void ConfigurationContentsWidget::updateActions()
 	}
 }
 
-QString ConfigurationContentsWidget::getTitle() const
-{
-	return tr("Advanced Configuration");
-}
-
-QLatin1String ConfigurationContentsWidget::getType() const
-{
-	return QLatin1String("config");
-}
-
-QUrl ConfigurationContentsWidget::getUrl() const
-{
-	return QUrl(QLatin1String("about:config"));
-}
-
-QIcon ConfigurationContentsWidget::getIcon() const
-{
-	return ThemesManager::createIcon(QLatin1String("configuration"), false);
-}
-
 QModelIndex ConfigurationContentsWidget::findGroup(int identifier) const
 {
 	const QString group(SettingsManager::getOptionName(identifier).section(QLatin1Char('/'), 0, 0));
@@ -587,7 +564,7 @@ QModelIndex ConfigurationContentsWidget::findGroup(int identifier) const
 
 bool ConfigurationContentsWidget::canClose()
 {
-	switch (QMessageBox::question(this, tr("Question"), tr("The settings have been changed.\nDo you want to save them?"), QMessageBox::Yes, QMessageBox::No, QMessageBox::Cancel))
+	switch (QMessageBox::question(this, tr("Question"), tr("The settings have been changed.\nDo you want to save them?"), (QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel), QMessageBox::Cancel))
 	{
 		case QMessageBox::Cancel:
 			return false;

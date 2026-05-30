@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2015 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -20,7 +20,6 @@
 #include "NotesContentsWidget.h"
 #include "../../../core/Application.h"
 #include "../../../core/NotesManager.h"
-#include "../../../core/SettingsManager.h"
 #include "../../../core/ThemesManager.h"
 #include "../../../core/Utils.h"
 #include "../../../ui/Action.h"
@@ -29,15 +28,13 @@
 
 #include <QtGui/QClipboard>
 #include <QtGui/QMouseEvent>
-#include <QtWidgets/QDesktopWidget>
 #include <QtWidgets/QInputDialog>
 #include <QtWidgets/QMenu>
-#include <QtWidgets/QToolTip>
 
 namespace Otter
 {
 
-NotesContentsWidget::NotesContentsWidget(const QVariantMap &parameters, Window *window, QWidget *parent) : ContentsWidget(parameters, window, parent),
+NotesContentsWidget::NotesContentsWidget(const QVariantMap &parameters, Window *window, QWidget *parent) : SpecialPageContentsWidget(QLatin1String("notes"), parameters, window, parent),
 	m_ui(new Ui::NotesContentsWidget)
 {
 	m_ui->setupUi(this);
@@ -322,26 +319,6 @@ BookmarksModel::Bookmark* NotesContentsWidget::findFolder(const QModelIndex &ind
 	return (bookmark->isFolder() ? bookmark : bookmark->getParent());
 }
 
-QString NotesContentsWidget::getTitle() const
-{
-	return tr("Notes");
-}
-
-QLatin1String NotesContentsWidget::getType() const
-{
-	return QLatin1String("notes");
-}
-
-QUrl NotesContentsWidget::getUrl() const
-{
-	return QUrl(QLatin1String("about:notes"));
-}
-
-QIcon NotesContentsWidget::getIcon() const
-{
-	return ThemesManager::createIcon(QLatin1String("notes"), false);
-}
-
 QVariant NotesContentsWidget::getCurrentIndexData(int role) const
 {
 	return m_ui->notesViewWidget->currentIndex().data(role);
@@ -401,7 +378,7 @@ bool NotesContentsWidget::eventFilter(QObject *object, QEvent *event)
 	{
 		const QMouseEvent *mouseEvent(static_cast<QMouseEvent*>(event));
 
-		if ((mouseEvent->button() == Qt::LeftButton && mouseEvent->modifiers() != Qt::NoModifier) || mouseEvent->button() == Qt::MiddleButton)
+		if (mouseEvent->button() == Qt::MiddleButton || (mouseEvent->button() == Qt::LeftButton && mouseEvent->modifiers() != Qt::NoModifier))
 		{
 			const BookmarksModel::Bookmark *bookmark(NotesManager::getModel()->getBookmark(m_ui->notesViewWidget->indexAt(mouseEvent->pos())));
 
@@ -421,7 +398,7 @@ bool NotesContentsWidget::eventFilter(QObject *object, QEvent *event)
 
 		if (bookmark)
 		{
-			QToolTip::showText(helpEvent->globalPos(), QFontMetrics(QToolTip::font()).elidedText(bookmark->toolTip(), Qt::ElideRight, (QApplication::desktop()->screenGeometry(m_ui->notesViewWidget).width() / 2)), m_ui->notesViewWidget, m_ui->notesViewWidget->visualRect(index));
+			Utils::showToolTip(helpEvent->globalPos(), bookmark->toolTip(), m_ui->notesViewWidget, m_ui->notesViewWidget->visualRect(index));
 		}
 
 		return true;

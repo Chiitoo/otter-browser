@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2015 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -219,7 +219,9 @@ void StartPageModel::handleThumbnailCreated(quint64 identifier, const QPixmap &t
 			bookmark->setData(title, BookmarksModel::TitleRole);
 		}
 
-		emit isReloadingTileChanged(index(bookmark->index().row(), bookmark->index().column()));
+		const QModelIndex bookmarkIndex(bookmark->index());
+
+		emit isReloadingTileChanged(index(bookmarkIndex.row(), bookmarkIndex.column()));
 	}
 }
 
@@ -234,19 +236,21 @@ QMimeData* StartPageModel::mimeData(const QModelIndexList &indexes) const
 
 	if (indexes.count() == 1)
 	{
-		mimeData->setProperty("x-item-index", indexes.at(0));
+		const QModelIndex index(indexes.at(0));
 
-		itemFromIndex(indexes.at(0))->setData(true, IsDraggedRole);
+		mimeData->setProperty("x-item-index", index);
+
+		itemFromIndex(index)->setData(true, IsDraggedRole);
 	}
 
-	for (int i = 0; i < indexes.count(); ++i)
+	for (const QModelIndex &index: indexes)
 	{
-		const QModelIndex index(indexes.at(i));
-
 		if (index.isValid() && static_cast<BookmarksModel::BookmarkType>(index.data(BookmarksModel::TypeRole).toInt()) == BookmarksModel::UrlBookmark)
 		{
-			texts.append(index.data(BookmarksModel::UrlRole).toString());
-			urls.append(index.data(BookmarksModel::UrlRole).toUrl());
+			const QVariant data(index.data(BookmarksModel::UrlRole));
+
+			texts.append(data.toString());
+			urls.append(data.toUrl());
 		}
 	}
 
@@ -430,9 +434,9 @@ bool StartPageModel::dropMimeData(const QMimeData *data, Qt::DropAction action, 
 	{
 		const QVector<QUrl> urls(Utils::extractUrls(data));
 
-		for (int i = 0; i < urls.count(); ++i)
+		for (const QUrl &url: urls)
 		{
-			addTile(urls.at(i));
+			addTile(url);
 		}
 	}
 

@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2017 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2017 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -43,38 +43,48 @@ ProxyPropertiesDialog::ProxyPropertiesDialog(const ProxyDefinition &proxy, QWidg
 
 		if (proxy.servers.contains(ProxyDefinition::AnyProtocol))
 		{
+			const ProxyDefinition::ProxyServer server(proxy.servers[ProxyDefinition::AnyProtocol]);
+
 			m_ui->allCheckBox->setChecked(true);
-			m_ui->allServersLineEditWidget->setText(proxy.servers[ProxyDefinition::AnyProtocol].hostName);
-			m_ui->allPortSpinBox->setValue(proxy.servers[ProxyDefinition::AnyProtocol].port);
+			m_ui->allServersLineEditWidget->setText(server.hostName);
+			m_ui->allPortSpinBox->setValue(server.port);
 		}
 		else
 		{
 			if (proxy.servers.contains(ProxyDefinition::HttpProtocol))
 			{
+				const ProxyDefinition::ProxyServer server(proxy.servers[ProxyDefinition::HttpProtocol]);
+
 				m_ui->httpCheckBox->setChecked(true);
-				m_ui->httpServersLineEditWidget->setText(proxy.servers[ProxyDefinition::HttpProtocol].hostName);
-				m_ui->httpPortSpinBox->setValue(proxy.servers[ProxyDefinition::HttpProtocol].port);
+				m_ui->httpServersLineEditWidget->setText(server.hostName);
+				m_ui->httpPortSpinBox->setValue(server.port);
 			}
 
 			if (proxy.servers.contains(ProxyDefinition::HttpsProtocol))
 			{
+				const ProxyDefinition::ProxyServer server(proxy.servers[ProxyDefinition::HttpsProtocol]);
+
 				m_ui->httpsCheckBox->setChecked(true);
-				m_ui->httpsServersLineEditWidget->setText(proxy.servers[ProxyDefinition::HttpsProtocol].hostName);
-				m_ui->httpsPortSpinBox->setValue(proxy.servers[ProxyDefinition::HttpsProtocol].port);
+				m_ui->httpsServersLineEditWidget->setText(server.hostName);
+				m_ui->httpsPortSpinBox->setValue(server.port);
 			}
 
 			if (proxy.servers.contains(ProxyDefinition::FtpProtocol))
 			{
+				const ProxyDefinition::ProxyServer server(proxy.servers[ProxyDefinition::FtpProtocol]);
+
 				m_ui->ftpCheckBox->setChecked(true);
-				m_ui->ftpServersLineEditWidget->setText(proxy.servers[ProxyDefinition::FtpProtocol].hostName);
-				m_ui->ftpPortSpinBox->setValue(proxy.servers[ProxyDefinition::FtpProtocol].port);
+				m_ui->ftpServersLineEditWidget->setText(server.hostName);
+				m_ui->ftpPortSpinBox->setValue(server.port);
 			}
 
 			if (proxy.servers.contains(ProxyDefinition::SocksProtocol))
 			{
+				const ProxyDefinition::ProxyServer server(proxy.servers[ProxyDefinition::SocksProtocol]);
+
 				m_ui->socksCheckBox->setChecked(true);
-				m_ui->socksServersLineEditWidget->setText(proxy.servers[ProxyDefinition::SocksProtocol].hostName);
-				m_ui->socksPortSpinBox->setValue(proxy.servers[ProxyDefinition::SocksProtocol].port);
+				m_ui->socksServersLineEditWidget->setText(server.hostName);
+				m_ui->socksPortSpinBox->setValue(server.port);
 			}
 		}
 	}
@@ -83,9 +93,9 @@ ProxyPropertiesDialog::ProxyPropertiesDialog(const ProxyDefinition &proxy, QWidg
 
 	QStandardItemModel *exceptionsModel(new QStandardItemModel(this));
 
-	for (int i = 0; i < proxy.exceptions.count(); ++i)
+	for (const QString &exception: proxy.exceptions)
 	{
-		exceptionsModel->appendRow(new QStandardItem(proxy.exceptions.at(i)));
+		exceptionsModel->appendRow(new QStandardItem(exception));
 	}
 
 	m_ui->exceptionsItemViewWidget->setModel(exceptionsModel);
@@ -145,22 +155,22 @@ void ProxyPropertiesDialog::updateProxyType()
 {
 	if (m_ui->manualConfigurationCheckBox->isChecked())
 	{
-		const bool usesSeparateServers(!m_ui->allCheckBox->isChecked());
+		const bool hasSeparateServers(!m_ui->allCheckBox->isChecked());
 
 		m_ui->manualConfigurationWidget->setEnabled(true);
 		m_ui->automaticConfigurationWidget->setEnabled(false);
-		m_ui->httpCheckBox->setEnabled(usesSeparateServers);
-		m_ui->httpServersLineEditWidget->setEnabled(usesSeparateServers);
-		m_ui->httpPortSpinBox->setEnabled(usesSeparateServers);
-		m_ui->httpsCheckBox->setEnabled(usesSeparateServers);
-		m_ui->httpsServersLineEditWidget->setEnabled(usesSeparateServers);
-		m_ui->httpsPortSpinBox->setEnabled(usesSeparateServers);
-		m_ui->ftpCheckBox->setEnabled(usesSeparateServers);
-		m_ui->ftpServersLineEditWidget->setEnabled(usesSeparateServers);
-		m_ui->ftpPortSpinBox->setEnabled(usesSeparateServers);
-		m_ui->socksCheckBox->setEnabled(usesSeparateServers);
-		m_ui->socksServersLineEditWidget->setEnabled(usesSeparateServers);
-		m_ui->socksPortSpinBox->setEnabled(usesSeparateServers);
+		m_ui->httpCheckBox->setEnabled(hasSeparateServers);
+		m_ui->httpServersLineEditWidget->setEnabled(hasSeparateServers);
+		m_ui->httpPortSpinBox->setEnabled(hasSeparateServers);
+		m_ui->httpsCheckBox->setEnabled(hasSeparateServers);
+		m_ui->httpsServersLineEditWidget->setEnabled(hasSeparateServers);
+		m_ui->httpsPortSpinBox->setEnabled(hasSeparateServers);
+		m_ui->ftpCheckBox->setEnabled(hasSeparateServers);
+		m_ui->ftpServersLineEditWidget->setEnabled(hasSeparateServers);
+		m_ui->ftpPortSpinBox->setEnabled(hasSeparateServers);
+		m_ui->socksCheckBox->setEnabled(hasSeparateServers);
+		m_ui->socksServersLineEditWidget->setEnabled(hasSeparateServers);
+		m_ui->socksPortSpinBox->setEnabled(hasSeparateServers);
 	}
 	else
 	{

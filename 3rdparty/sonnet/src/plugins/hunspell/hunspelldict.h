@@ -21,6 +21,12 @@
 #ifndef KSPELL_HUNSPELLDICT_H
 #define KSPELL_HUNSPELLDICT_H
 
+#if QT_VERSION >= 0x060000
+#include <QtCore5Compat/QTextCodec>
+#else
+#include <QTextCodec>
+#endif
+
 #include "../../core/spellerplugin_p.h"
 #include "hunspell/hunspell.hxx"
 

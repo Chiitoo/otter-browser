@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 - 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
 * Copyright (C) 2016 - 2017 Piotr Wójcik <chocimier@tlen.pl>
 *
@@ -20,10 +20,10 @@
 **************************************************************************/
 
 #include "AdvancedPreferencesPage.h"
-#include "../../../core/ActionsManager.h"
 #include "../../../core/Application.h"
 #include "../../../core/GesturesManager.h"
 #include "../../../core/HandlersManager.h"
+#include "../../../core/IniSettings.h"
 #include "../../../core/JsonSettings.h"
 #include "../../../core/NotificationsManager.h"
 #include "../../../core/SessionsManager.h"
@@ -40,7 +40,6 @@
 #include <QtCore/QJsonArray>
 #include <QtCore/QJsonObject>
 #include <QtCore/QMimeDatabase>
-#include <QtCore/QSettings>
 #include <QtMultimedia/QSoundEffect>
 #include <QtNetwork/QSslSocket>
 #include <QtNetwork/QSslCipher>
@@ -97,13 +96,13 @@ void AdvancedPreferencesPage::changeEvent(QEvent *event)
 				m_ui->enableFullScreenComboBox->setItemText(1, tr("Always"));
 				m_ui->enableFullScreenComboBox->setItemText(2, tr("Never"));
 
-				for (int i = 0; i < navigationTitles.count(); ++i)
-				{
-					const QString title(navigationTitles.at(i));
+				int index(-1);
 
+				for (const QString &title: navigationTitles)
+				{
 					if (!title.isEmpty())
 					{
-						m_ui->advancedViewWidget->setData(m_ui->advancedViewWidget->getIndex(i), title, Qt::DisplayRole);
+						m_ui->advancedViewWidget->setData(m_ui->advancedViewWidget->getIndex(++index), title, Qt::DisplayRole);
 					}
 				}
 
@@ -156,6 +155,7 @@ void AdvancedPreferencesPage::updateNotificationsActions()
 	m_ui->notificationsPlaySoundFilePathWidget->blockSignals(true);
 	m_ui->notificationsShowAlertCheckBox->blockSignals(true);
 	m_ui->notificationsShowNotificationCheckBox->blockSignals(true);
+	m_ui->preferNativeNotificationsCheckBox->blockSignals(true);
 
 	const QModelIndex index(m_ui->notificationsItemView->getIndex(m_ui->notificationsItemView->getCurrentRow()));
 	const QString path(index.data(SoundPathRole).toString());
@@ -168,6 +168,7 @@ void AdvancedPreferencesPage::updateNotificationsActions()
 	m_ui->notificationsPlaySoundFilePathWidget->blockSignals(false);
 	m_ui->notificationsShowAlertCheckBox->blockSignals(false);
 	m_ui->notificationsShowNotificationCheckBox->blockSignals(false);
+	m_ui->preferNativeNotificationsCheckBox->blockSignals(false);
 }
 
 void AdvancedPreferencesPage::updateNotificationsOptions()
@@ -280,32 +281,34 @@ void AdvancedPreferencesPage::updateDownloadsActions()
 
 void AdvancedPreferencesPage::updateDownloadsOptions()
 {
+	const QModelIndex index(m_ui->mimeTypesItemView->getIndex(m_ui->mimeTypesItemView->getCurrentRow()));
+
+	if (!index.isValid())
+	{
+		return;
+	}
+
 	disconnect(m_ui->mimeTypesItemView, &ItemViewWidget::needsActionsUpdate, this, &AdvancedPreferencesPage::updateDownloadsActions);
 	disconnect(m_ui->mimeTypesButtonGroup, static_cast<void(QButtonGroup::*)(QAbstractButton*, bool)>(&QButtonGroup::buttonToggled), this, &AdvancedPreferencesPage::updateDownloadsOptions);
 
-	const QModelIndex index(m_ui->mimeTypesItemView->getIndex(m_ui->mimeTypesItemView->getCurrentRow()));
+	HandlersManager::MimeTypeHandlerDefinition::TransferMode mode(HandlersManager::MimeTypeHandlerDefinition::IgnoreTransfer);
 
-	if (index.isValid())
+	if (m_ui->mimeTypesSaveButton->isChecked())
 	{
-		HandlersManager::MimeTypeHandlerDefinition::TransferMode mode(HandlersManager::MimeTypeHandlerDefinition::IgnoreTransfer);
-
-		if (m_ui->mimeTypesSaveButton->isChecked())
-		{
-			mode = (m_ui->mimeTypesSaveDirectlyCheckBox->isChecked() ? HandlersManager::MimeTypeHandlerDefinition::SaveTransfer : HandlersManager::MimeTypeHandlerDefinition::SaveAsTransfer);
-		}
-		else if (m_ui->mimeTypesOpenButton->isChecked())
-		{
-			mode = HandlersManager::MimeTypeHandlerDefinition::OpenTransfer;
-		}
-		else
-		{
-			mode = HandlersManager::MimeTypeHandlerDefinition::AskTransfer;
-		}
-
-		m_ui->mimeTypesItemView->setData(index, mode, TransferModeRole);
-		m_ui->mimeTypesItemView->setData(index, ((mode == HandlersManager::MimeTypeHandlerDefinition::SaveTransfer || mode == HandlersManager::MimeTypeHandlerDefinition::SaveAsTransfer) ? m_ui->mimeTypesFilePathWidget->getPath() : QString()), DownloadsPathRole);
-		m_ui->mimeTypesItemView->setData(index, ((mode == HandlersManager::MimeTypeHandlerDefinition::OpenTransfer) ? m_ui->mimeTypesApplicationComboBoxWidget->getCommand() : QString()), OpenCommandRole);
+		mode = (m_ui->mimeTypesSaveDirectlyCheckBox->isChecked() ? HandlersManager::MimeTypeHandlerDefinition::SaveTransfer : HandlersManager::MimeTypeHandlerDefinition::SaveAsTransfer);
 	}
+	else if (m_ui->mimeTypesOpenButton->isChecked())
+	{
+		mode = HandlersManager::MimeTypeHandlerDefinition::OpenTransfer;
+	}
+	else
+	{
+		mode = HandlersManager::MimeTypeHandlerDefinition::AskTransfer;
+	}
+
+	m_ui->mimeTypesItemView->setData(index, mode, TransferModeRole);
+	m_ui->mimeTypesItemView->setData(index, ((mode == HandlersManager::MimeTypeHandlerDefinition::SaveTransfer || mode == HandlersManager::MimeTypeHandlerDefinition::SaveAsTransfer) ? m_ui->mimeTypesFilePathWidget->getPath() : QString()), DownloadsPathRole);
+	m_ui->mimeTypesItemView->setData(index, ((mode == HandlersManager::MimeTypeHandlerDefinition::OpenTransfer) ? m_ui->mimeTypesApplicationComboBoxWidget->getCommand() : QString()), OpenCommandRole);
 
 	connect(m_ui->mimeTypesItemView, &ItemViewWidget::needsActionsUpdate, this, &AdvancedPreferencesPage::updateDownloadsActions);
 	connect(m_ui->mimeTypesButtonGroup, static_cast<void(QButtonGroup::*)(QAbstractButton*, bool)>(&QButtonGroup::buttonToggled), this, &AdvancedPreferencesPage::updateDownloadsOptions);
@@ -921,9 +924,9 @@ void AdvancedPreferencesPage::updateReaddMouseProfileMenu()
 	QVector<MouseProfile> availableMouseProfiles;
 	const QList<QFileInfo> allMouseProfiles(QDir(SessionsManager::getReadableDataPath(QLatin1String("mouse"))).entryInfoList({QLatin1String("*.json")}, QDir::Files) + QDir(SessionsManager::getReadableDataPath(QLatin1String("mouse"), true)).entryInfoList({QLatin1String("*.json")}, QDir::Files));
 
-	for (int i = 0; i < allMouseProfiles.count(); ++i)
+	for (const QFileInfo &information: allMouseProfiles)
 	{
-		const QString identifier(allMouseProfiles.at(i).baseName());
+		const QString identifier(information.baseName());
 
 		if (!m_mouseProfiles.contains(identifier) && !availableIdentifiers.contains(identifier))
 		{
@@ -947,10 +950,8 @@ void AdvancedPreferencesPage::updateReaddMouseProfileMenu()
 	readdMenu->clear();
 	readdMenu->setEnabled(!availableMouseProfiles.isEmpty());
 
-	for (int i = 0; i < availableMouseProfiles.count(); ++i)
+	for (const MouseProfile &profile: availableMouseProfiles)
 	{
-		const MouseProfile profile(availableMouseProfiles.at(i));
-
 		readdMenu->addAction(profile.getTitle())->setData(profile.getName());
 	}
 }
@@ -975,9 +976,8 @@ void AdvancedPreferencesPage::load()
 	const QStringList navigationTitles({tr("Browsing"), tr("Notifications"), tr("Appearance"), {}, tr("Downloads"), tr("Programs"), {}, tr("History"), tr("Network"), tr("Scripting"), tr("Security"), tr("Updates"), {}, tr("Mouse")});
 	int navigationIndex(0);
 
-	for (int i = 0; i < navigationTitles.count(); ++i)
+	for (const QString &title: navigationTitles)
 	{
-		const QString title(navigationTitles.at(i));
 		QStandardItem *item(new QStandardItem(title));
 		item->setFlags(item->flags() | Qt::ItemNeverHasChildren);
 
@@ -990,16 +990,14 @@ void AdvancedPreferencesPage::load()
 		{
 			item->setData(navigationIndex, Qt::UserRole);
 
-			if (i == 7)
-			{
-				item->setEnabled(false);
-			}
-
 			++navigationIndex;
 		}
 
 		navigationModel->appendRow(item);
 	}
+
+	navigationModel->item(7, 0)->setEnabled(false);
+	navigationModel->item(11, 0)->setEnabled(false);
 
 	m_ui->advancedViewWidget->setModel(navigationModel);
 	m_ui->advancedViewWidget->selectionModel()->select(navigationModel->index(0, 0), QItemSelectionModel::Select);
@@ -1032,9 +1030,8 @@ void AdvancedPreferencesPage::load()
 
 	const QVector<NotificationsManager::EventDefinition> events(NotificationsManager::getEventDefinitions());
 
-	for (int i = 0; i < events.count(); ++i)
+	for (const NotificationsManager::EventDefinition &event: events)
 	{
-		const NotificationsManager::EventDefinition event(events.at(i));
 		QList<QStandardItem*> items({new QStandardItem(event.getTitle()), new QStandardItem(event.getDescription())});
 		items[0]->setData(event.identifier, IdentifierRole);
 		items[0]->setData(event.playSound, SoundPathRole);
@@ -1053,9 +1050,9 @@ void AdvancedPreferencesPage::load()
 
 	m_ui->appearranceWidgetStyleComboBox->addItem(tr("System Style"));
 
-	for (int i = 0; i < widgetStyles.count(); ++i)
+	for (const QString &style: widgetStyles)
 	{
-		m_ui->appearranceWidgetStyleComboBox->addItem(widgetStyles.at(i));
+		m_ui->appearranceWidgetStyleComboBox->addItem(style);
 	}
 
 	m_ui->appearranceWidgetStyleComboBox->setCurrentIndex(qMax(0, m_ui->appearranceWidgetStyleComboBox->findData(SettingsManager::getOption(SettingsManager::Interface_WidgetStyleOption).toString(), Qt::DisplayRole)));
@@ -1068,12 +1065,12 @@ void AdvancedPreferencesPage::load()
 
 	const QVector<HandlersManager::MimeTypeHandlerDefinition> handlers(HandlersManager::getMimeTypeHandlers());
 
-	for (int i = 0; i < handlers.count(); ++i)
+	for (const HandlersManager::MimeTypeHandlerDefinition &handler: handlers)
 	{
-		QStandardItem *item(new QStandardItem(handlers.at(i).mimeType.isValid() ? handlers.at(i).mimeType.name() : QLatin1String("*")));
-		item->setData(handlers.at(i).transferMode, TransferModeRole);
-		item->setData(handlers.at(i).downloadsPath, DownloadsPathRole);
-		item->setData(handlers.at(i).openCommand, OpenCommandRole);
+		QStandardItem *item(new QStandardItem(handler.mimeType.isValid() ? handler.mimeType.name() : QLatin1String("*")));
+		item->setData(handler.transferMode, TransferModeRole);
+		item->setData(handler.downloadsPath, DownloadsPathRole);
+		item->setData(handler.openCommand, OpenCommandRole);
 		item->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemNeverHasChildren);
 
 		mimeTypesModel->appendRow(item);
@@ -1153,9 +1150,9 @@ void AdvancedPreferencesPage::load()
 		const bool useDefaultCiphers(SettingsManager::getOption(SettingsManager::Security_CiphersOption).toString() == QLatin1String("default"));
 		const QStringList selectedCiphers(useDefaultCiphers ? QStringList() : SettingsManager::getOption(SettingsManager::Security_CiphersOption).toStringList());
 
-		for (int i = 0; i < selectedCiphers.count(); ++i)
+		for (const QString &identifier: selectedCiphers)
 		{
-			const QSslCipher cipher(selectedCiphers.at(i));
+			const QSslCipher cipher(identifier);
 
 			if (!cipher.isNull())
 			{
@@ -1169,18 +1166,20 @@ void AdvancedPreferencesPage::load()
 		const QList<QSslCipher> defaultCiphers(NetworkManagerFactory::getDefaultCiphers());
 		const QList<QSslCipher> supportedCiphers(QSslConfiguration::supportedCiphers());
 
-		for (int i = 0; i < supportedCiphers.count(); ++i)
+		for (const QSslCipher &cipher: supportedCiphers)
 		{
-			if (useDefaultCiphers && defaultCiphers.contains(supportedCiphers.at(i)))
+			const QString cipherName(cipher.name());
+
+			if (useDefaultCiphers && defaultCiphers.contains(cipher))
 			{
-				QStandardItem *item(new QStandardItem(supportedCiphers.at(i).name()));
+				QStandardItem *item(new QStandardItem(cipherName));
 				item->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemIsDragEnabled | Qt::ItemNeverHasChildren);
 
 				ciphersModel->appendRow(item);
 			}
-			else if (!selectedCiphers.contains(supportedCiphers.at(i).name()))
+			else if (!selectedCiphers.contains(cipherName))
 			{
-				m_ui->ciphersAddButton->menu()->addAction(supportedCiphers.at(i).name());
+				m_ui->ciphersAddButton->menu()->addAction(cipherName);
 			}
 		}
 
@@ -1201,12 +1200,12 @@ void AdvancedPreferencesPage::load()
 	const QStringList activeUpdateChannels(SettingsManager::getOption(SettingsManager::Updates_ActiveChannelsOption).toStringList());
 	const QVector<QPair<QString, QString> > updateChannels({{QLatin1String("release"), tr("Stable version")}, {QLatin1String("beta"), tr("Beta version")}, {QLatin1String("weekly"), tr("Weekly development version")}});
 
-	for (int i = 0; i < updateChannels.count(); ++i)
+	for (const QPair<QString, QString> &updateChannel: updateChannels)
 	{
-		QStandardItem *item(new QStandardItem(updateChannels.at(i).second));
+		QStandardItem *item(new QStandardItem(updateChannel.second));
 		item->setCheckable(true);
-		item->setCheckState(activeUpdateChannels.contains(updateChannels.at(i).first) ? Qt::Checked : Qt::Unchecked);
-		item->setData(updateChannels.at(i).first, Qt::UserRole);
+		item->setCheckState(activeUpdateChannels.contains(updateChannel.first) ? Qt::Checked : Qt::Unchecked);
+		item->setData(updateChannel.first, Qt::UserRole);
 		item->setFlags(item->flags() | Qt::ItemNeverHasChildren);
 
 		updateChannelsModel->appendRow(item);
@@ -1225,16 +1224,16 @@ void AdvancedPreferencesPage::load()
 	QStandardItemModel *mouseProfilesModel(new QStandardItemModel(this));
 	const QStringList mouseProfiles(SettingsManager::getOption(SettingsManager::Browser_MouseProfilesOrderOption).toStringList());
 
-	for (int i = 0; i < mouseProfiles.count(); ++i)
+	for (const QString &identifier: mouseProfiles)
 	{
-		const MouseProfile profile(mouseProfiles.at(i), MouseProfile::FullMode);
+		const MouseProfile profile(identifier, MouseProfile::FullMode);
 
 		if (!profile.isValid())
 		{
 			continue;
 		}
 
-		m_mouseProfiles[mouseProfiles.at(i)] = profile;
+		m_mouseProfiles[identifier] = profile;
 
 		QStandardItem *item(new QStandardItem(profile.getTitle()));
 		item->setToolTip(profile.getDescription());
@@ -1268,6 +1267,10 @@ void AdvancedPreferencesPage::load()
 	});
 	connect(m_ui->notificationsItemView, &ItemViewWidget::needsActionsUpdate, this, &AdvancedPreferencesPage::updateNotificationsActions);
 	connect(m_ui->notificationsPlaySoundButton, &QToolButton::clicked, this, &AdvancedPreferencesPage::playNotificationSound);
+	connect(m_ui->notificationsPlaySoundFilePathWidget, &FilePathWidget::pathChanged, this, &AdvancedPreferencesPage::updateNotificationsOptions);
+	connect(m_ui->notificationsShowNotificationCheckBox, &QCheckBox::toggled, this, &AdvancedPreferencesPage::updateNotificationsOptions);
+	connect(m_ui->notificationsShowAlertCheckBox, &QCheckBox::toggled, this, &AdvancedPreferencesPage::updateNotificationsOptions);
+	connect(m_ui->preferNativeNotificationsCheckBox, &QCheckBox::toggled, this, &AdvancedPreferencesPage::updateNotificationsOptions);
 	connect(m_ui->mimeTypesItemView, &ItemViewWidget::needsActionsUpdate, this, &AdvancedPreferencesPage::updateDownloadsActions);
 	connect(m_ui->mimeTypesAddMimeTypeButton, &QPushButton::clicked, this, &AdvancedPreferencesPage::addDownloadsMimeType);
 	connect(m_ui->mimeTypesRemoveMimeTypeButton, &QPushButton::clicked, this, &AdvancedPreferencesPage::removeDownloadsMimeType);
@@ -1333,10 +1336,7 @@ void AdvancedPreferencesPage::save()
 		return;
 	}
 
-	for (int i = 0; i < m_filesToRemove.count(); ++i)
-	{
-		QFile::remove(m_filesToRemove.at(i));
-	}
+	Utils::removeFiles(m_filesToRemove);
 
 	m_filesToRemove.clear();
 
@@ -1348,8 +1348,9 @@ void AdvancedPreferencesPage::save()
 	SettingsManager::setOption(SettingsManager::AddressField_CompletionDisplayModeOption, (m_ui->browsingDisplayModeColumnsRadioButton->isChecked() ? QLatin1String("columns") : QLatin1String("compact")));
 	SettingsManager::setOption(SettingsManager::AddressField_ShowCompletionCategoriesOption, m_ui->browsingCategoriesCheckBox->isChecked());
 
-	QSettings notificationsSettings(SessionsManager::getWritableDataPath(QLatin1String("notifications.ini")), QSettings::IniFormat);
-	notificationsSettings.setIniCodec("UTF-8");
+	updateNotificationsOptions();
+
+	IniSettings notificationsSettings(SessionsManager::getWritableDataPath(QLatin1String("notifications.ini")), this);
 	notificationsSettings.clear();
 
 	for (int i = 0; i < m_ui->notificationsItemView->getRowCount(); ++i)
@@ -1382,25 +1383,22 @@ void AdvancedPreferencesPage::save()
 	SettingsManager::setOption(SettingsManager::Interface_StyleSheetOption, m_ui->appearranceStyleSheetFilePathWidget->getPath());
 	SettingsManager::setOption(SettingsManager::Browser_EnableTrayIconOption, m_ui->enableTrayIconCheckBox->isChecked());
 
-	if (m_ui->appearranceStyleSheetFilePathWidget->getPath().isEmpty())
+	QString styleSheetPath(m_ui->appearranceStyleSheetFilePathWidget->getPath());
+	QString styleSheet;
+
+	if (!styleSheetPath.isEmpty())
 	{
-		Application::getInstance()->setStyleSheet({});
-	}
-	else
-	{
-		QFile file(m_ui->appearranceStyleSheetFilePathWidget->getPath());
+		QFile file(styleSheetPath);
 
 		if (file.open(QIODevice::ReadOnly))
 		{
-			Application::getInstance()->setStyleSheet(QString::fromLatin1(file.readAll()));
+			styleSheet = QString::fromLatin1(file.readAll());
 
 			file.close();
 		}
-		else
-		{
-			Application::getInstance()->setStyleSheet({});
-		}
 	}
+
+	Application::getInstance()->setStyleSheet(styleSheet);
 
 	const QMimeDatabase mimeDatabase;
 
@@ -1417,18 +1415,18 @@ void AdvancedPreferencesPage::save()
 			continue;
 		}
 
-		HandlersManager::MimeTypeHandlerDefinition definition;
+		HandlersManager::MimeTypeHandlerDefinition hamdler;
 
 		if (index.data(Qt::DisplayRole).toString() != QLatin1String("*"))
 		{
-			definition.mimeType = mimeDatabase.mimeTypeForName(index.data(Qt::DisplayRole).toString());
+			hamdler.mimeType = mimeDatabase.mimeTypeForName(index.data(Qt::DisplayRole).toString());
 		}
 
-		definition.openCommand = index.data(OpenCommandRole).toString();
-		definition.downloadsPath = index.data(DownloadsPathRole).toString();
-		definition.transferMode = static_cast<HandlersManager::MimeTypeHandlerDefinition::TransferMode>(index.data(TransferModeRole).toInt());
+		hamdler.openCommand = index.data(OpenCommandRole).toString();
+		hamdler.downloadsPath = index.data(DownloadsPathRole).toString();
+		hamdler.transferMode = static_cast<HandlersManager::MimeTypeHandlerDefinition::TransferMode>(index.data(TransferModeRole).toInt());
 
-		HandlersManager::setMimeTypeHandler(definition.mimeType, definition);
+		HandlersManager::setMimeTypeHandler(hamdler.mimeType, hamdler);
 	}
 
 	SettingsManager::setOption(SettingsManager::Permissions_EnableJavaScriptOption, m_ui->enableJavaScriptCheckBox->isChecked());
@@ -1484,6 +1482,7 @@ void AdvancedPreferencesPage::save()
 	}
 
 	QStringList updateChannels;
+	updateChannels.reserve(m_ui->updateChannelsItemView->getRowCount());
 
 	for (int i = 0; i < m_ui->updateChannelsItemView->getRowCount(); ++i)
 	{

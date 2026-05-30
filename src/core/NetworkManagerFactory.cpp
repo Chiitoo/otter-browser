@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 Piotr Wójcik <chocimier@tlen.pl>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -35,7 +35,9 @@
 #include <QtCore/QJsonArray>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
+#if QT_VERSION < 0x060000
 #include <QtNetwork/QNetworkConfigurationManager>
+#endif
 #include <QtNetwork/QSslConfiguration>
 
 namespace Otter
@@ -69,9 +71,8 @@ ProxiesModel::ProxiesModel(const QString &selectedProxy, bool isEditor, QObject 
 
 void ProxiesModel::populateProxies(const QStringList &proxies, QStandardItem *parent, const QString &selectedProxy)
 {
-	for (int i = 0; i < proxies.count(); ++i)
+	for (const QString &identifier: proxies)
 	{
-		const QString identifier(proxies.at(i));
 		const ProxyDefinition proxy(identifier.isEmpty() ? ProxyDefinition() : NetworkManagerFactory::getProxy(identifier));
 		ItemType type(EntryType);
 		QStandardItem *item(new QStandardItem(proxy.isValid() ? proxy.getTitle() : QString()));
@@ -84,7 +85,7 @@ void ProxiesModel::populateProxies(const QStringList &proxies, QStandardItem *pa
 
 		if (proxy.isFolder)
 		{
-			item->setData(proxies.at(i), IdentifierRole);
+			item->setData(identifier, IdentifierRole);
 
 			type = FolderType;
 
@@ -141,9 +142,8 @@ UserAgentsModel::UserAgentsModel(const QString &selectedUserAgent, bool isEditor
 
 void UserAgentsModel::populateUserAgents(const QStringList &userAgents, QStandardItem *parent, const QString &selectedUserAgent)
 {
-	for (int i = 0; i < userAgents.count(); ++i)
+	for (const QString &identifier: userAgents)
 	{
-		const QString identifier(userAgents.at(i));
 		const UserAgentDefinition userAgent(identifier.isEmpty() ? UserAgentDefinition() : NetworkManagerFactory::getUserAgent(identifier));
 		ItemType type(EntryType);
 		QList<QStandardItem*> items({new QStandardItem(userAgent.isValid() ? userAgent.getTitle() : QString())});
@@ -212,10 +212,8 @@ NetworkManagerFactory::NetworkManagerFactory(QObject *parent) : QObject(parent)
 	QSslConfiguration configuration(QSslConfiguration::defaultConfiguration());
 	const QStringList paths({QDir(Application::getApplicationDirectoryPath()).filePath(QLatin1String("certificates")), SessionsManager::getWritableDataPath(QLatin1String("certificates"))});
 
-	for (int i = 0; i < paths.count(); ++i)
+	for (const QString &path: paths)
 	{
-		const QString path(paths.at(i));
-
 		if (QFile::exists(path))
 		{
 			configuration.addCaCertificates(QDir(path).filePath(QLatin1String("*")), QSsl::Pem, QSslCertificate::PatternSyntax::Wildcard);
@@ -279,7 +277,7 @@ void NetworkManagerFactory::clearCookies(int period)
 {
 	if (!m_cookieJar)
 	{
-		m_cookieJar = new CookieJar(SessionsManager::getWritableDataPath(QLatin1String("cookies.dat")), QCoreApplication::instance());
+		m_cookieJar = new DiskCookieJar(SessionsManager::getWritableDataPath(QLatin1String("cookies.dat")), QCoreApplication::instance());
 	}
 
 	m_cookieJar->clearCookies(period);
@@ -309,9 +307,9 @@ void NetworkManagerFactory::loadProxies()
 	const QJsonArray proxiesArray(QJsonDocument::fromJson(file.readAll()).array());
 	ProxyDefinition root;
 
-	for (int i = 0; i < proxiesArray.count(); ++i)
+	for (const QJsonValue &proxy: proxiesArray)
 	{
-		readProxy(proxiesArray.at(i), &root);
+		readProxy(proxy, &root);
 	}
 
 	file.close();
@@ -337,9 +335,9 @@ void NetworkManagerFactory::loadUserAgents()
 	const QJsonArray userAgentsArray(QJsonDocument::fromJson(file.readAll()).array());
 	UserAgentDefinition root;
 
-	for (int i = 0; i < userAgentsArray.count(); ++i)
+	for (const QJsonValue &userAgent: userAgentsArray)
 	{
-		readUserAgent(userAgentsArray.at(i), &root);
+		readUserAgent(userAgent, &root);
 	}
 
 	file.close();
@@ -376,9 +374,9 @@ void NetworkManagerFactory::readProxy(const QJsonValue &value, ProxyDefinition *
 
 			const QJsonArray childrenArray(proxyObject.value(QLatin1String("children")).toArray());
 
-			for (int i = 0; i < childrenArray.count(); ++i)
+			for (const QJsonValue &value: childrenArray)
 			{
-				readProxy(childrenArray.at(i), &proxy);
+				readProxy(value, &proxy);
 			}
 		}
 		else
@@ -406,9 +404,9 @@ void NetworkManagerFactory::readProxy(const QJsonValue &value, ProxyDefinition *
 			{
 				const QJsonArray serversArray(proxyObject.value(QLatin1String("servers")).toArray());
 
-				for (int i = 0; i < serversArray.count(); ++i)
+				for (const QJsonValue &serverValue: serversArray)
 				{
-					const QJsonObject serverObject(serversArray.at(i).toObject());
+					const QJsonObject serverObject(serverValue.toObject());
 					const QString protocol(serverObject.value(QLatin1String("protocol")).toString());
 					ProxyDefinition::ProxyServer server;
 					server.hostName = serverObject.value(QLatin1String("hostName")).toString();
@@ -480,9 +478,9 @@ void NetworkManagerFactory::readUserAgent(const QJsonValue &value, UserAgentDefi
 
 			const QJsonArray childrenArray(userAgentObject.value(QLatin1String("children")).toArray());
 
-			for (int i = 0; i < childrenArray.count(); ++i)
+			for (const QJsonValue &value: childrenArray)
 			{
-				readUserAgent(childrenArray.at(i), &userAgent);
+				readUserAgent(value, &userAgent);
 			}
 		}
 		else
@@ -655,7 +653,7 @@ CookieJar* NetworkManagerFactory::getCookieJar()
 {
 	if (!m_cookieJar)
 	{
-		m_cookieJar = new CookieJar(SessionsManager::getWritableDataPath(QLatin1String("cookies.dat")), QCoreApplication::instance());
+		m_cookieJar = new DiskCookieJar(SessionsManager::getWritableDataPath(QLatin1String("cookies.dat")), QCoreApplication::instance());
 	}
 
 	return m_cookieJar;
@@ -664,7 +662,7 @@ CookieJar* NetworkManagerFactory::getCookieJar()
 QNetworkReply* NetworkManagerFactory::createRequest(const QUrl &url, QNetworkAccessManager::Operation operation, bool isPrivate, QIODevice *outgoingData)
 {
 	QNetworkRequest request(url);
-	request.setAttribute(QNetworkRequest::FollowRedirectsAttribute, true);
+	request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
 	request.setHeader(QNetworkRequest::UserAgentHeader, getUserAgent());
 
 	return getNetworkManager(isPrivate)->createRequest(operation, request, outgoingData);
@@ -686,7 +684,7 @@ QStringList NetworkManagerFactory::getProxies()
 {
 	if (!m_isInitialized)
 	{
-		m_instance->initialize();
+		initialize();
 	}
 
 	return m_proxies[QLatin1String("root")].children;
@@ -696,7 +694,7 @@ QStringList NetworkManagerFactory::getUserAgents()
 {
 	if (!m_isInitialized)
 	{
-		m_instance->initialize();
+		initialize();
 	}
 
 	return m_userAgents[QLatin1String("root")].children;
@@ -711,7 +709,7 @@ ProxyDefinition NetworkManagerFactory::getProxy(const QString &identifier)
 {
 	if (!m_isInitialized)
 	{
-		m_instance->initialize();
+		initialize();
 	}
 
 	if (identifier.isEmpty() || !m_proxies.contains(identifier))
@@ -741,7 +739,7 @@ UserAgentDefinition NetworkManagerFactory::getUserAgent(const QString &identifie
 
 	if (!m_isInitialized)
 	{
-		m_instance->initialize();
+		initialize();
 	}
 
 	if (identifier.isEmpty() || !m_userAgents.contains(identifier))

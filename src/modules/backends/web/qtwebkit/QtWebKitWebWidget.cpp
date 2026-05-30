@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2015 - 2016 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -61,6 +61,9 @@
 #include <QtGui/QClipboard>
 #include <QtGui/QImageWriter>
 #include <QtGui/QMouseEvent>
+#if QT_VERSION >= 0x060000
+#include <QtGui/QShortcut>
+#endif
 #include <QtPrintSupport/QPrintPreviewDialog>
 #include <QtWebKit/QWebFullScreenRequest>
 #include <QtWebKit/QWebElement>
@@ -68,7 +71,9 @@
 #include <QtWebKitWidgets/QWebFrame>
 #include <QtWidgets/QMenu>
 #include <QtWidgets/QMessageBox>
+#if QT_VERSION < 0x060000
 #include <QtWidgets/QShortcut>
+#endif
 #include <QtWidgets/QUndoStack>
 #include <QtWidgets/QVBoxLayout>
 
@@ -98,7 +103,7 @@ void QtWebKitInspectorWidget::childEvent(QChildEvent *event)
 	}
 }
 
-QtWebKitWebWidget::QtWebKitWebWidget(const QVariantMap &parameters, WebBackend *backend, QtWebKitNetworkManager *networkManager, ContentsWidget *parent) : WebWidget(parameters, backend, parent),
+QtWebKitWebWidget::QtWebKitWebWidget(const QVariantMap &parameters, WebBackend *backend, QtWebKitNetworkManager *networkManager, ContentsWidget *parent) : WebWidget(backend, parent),
 	m_webView(new QWebView(this)),
 	m_page(nullptr),
 	m_inspectorWidget(nullptr),
@@ -160,7 +165,7 @@ QtWebKitWebWidget::QtWebKitWebWidget(const QVariantMap &parameters, WebBackend *
 	connect(m_page, &QtWebKitPage::downloadRequested, this, &QtWebKitWebWidget::handleDownloadRequested);
 	connect(m_page, &QtWebKitPage::unsupportedContent, this, &QtWebKitWebWidget::handleUnsupportedContent);
 	connect(m_page, &QtWebKitPage::linkHovered, this, &QtWebKitWebWidget::setStatusMessageOverride);
-	connect(m_page, &QtWebKitPage::microFocusChanged, [&]()
+	connect(m_page, &QtWebKitPage::microFocusChanged, this, [&]()
 	{
 		emit categorizedActionsStateChanged({ActionsManager::ActionDefinition::EditingCategory});
 	});
@@ -186,7 +191,7 @@ QtWebKitWebWidget::QtWebKitWebWidget(const QVariantMap &parameters, WebBackend *
 	{
 		emit contentStateChanged(getContentState());
 	});
-	connect(new QShortcut(QKeySequence(QKeySequence::SelectAll), this, nullptr, nullptr, Qt::WidgetWithChildrenShortcut), &QShortcut::activated, [&]()
+	connect(new QShortcut(QKeySequence(QKeySequence::SelectAll), this, nullptr, nullptr, Qt::WidgetWithChildrenShortcut), &QShortcut::activated, this, [&]()
 	{
 		triggerAction(ActionsManager::SelectAllAction);
 	});
@@ -418,15 +423,15 @@ void QtWebKitWebWidget::triggerAction(int identifier, const QVariantMap &paramet
 		case ActionsManager::ReloadFrameAction:
 			if (hitResult.frameUrl.isValid())
 			{
-				const QUrl url(hitResult.frameUrl);
+				const QUrl frameUrl(hitResult.frameUrl);
 				QWebFrame *frame(m_page->mainFrame()->hitTestContent(hitResult.hitPosition).frame());
 
 				if (frame)
 				{
-					m_networkManager->addContentBlockingException(url, NetworkManager::SubFrameType);
+					m_networkManager->addContentBlockingException(frameUrl, NetworkManager::SubFrameType);
 
 					frame->setUrl({});
-					frame->setUrl(url);
+					frame->setUrl(frameUrl);
 				}
 			}
 
@@ -507,7 +512,7 @@ void QtWebKitWebWidget::triggerAction(int identifier, const QVariantMap &paramet
 				else
 				{
 					QWebElement element(m_page->mainFrame()->hitTestContent(hitResult.hitPosition).element());
-					const QUrl url(hitResult.imageUrl);
+					const QUrl imageUrl(hitResult.imageUrl);
 					const QString src(element.attribute(QLatin1String("src")));
 					NetworkCache *cache(NetworkManagerFactory::getCache());
 
@@ -515,7 +520,7 @@ void QtWebKitWebWidget::triggerAction(int identifier, const QVariantMap &paramet
 
 					if (cache)
 					{
-						cache->remove(url);
+						cache->remove(imageUrl);
 					}
 
 					element.setAttribute(QLatin1String("src"), src);
@@ -608,11 +613,11 @@ void QtWebKitWebWidget::triggerAction(int identifier, const QVariantMap &paramet
 			break;
 		case ActionsManager::FastForwardAction:
 			{
-				const QUrl url(m_page->mainFrame()->evaluateJavaScript(getFastForwardScript(true)).toUrl());
+				const QUrl fastForwardUrl(m_page->mainFrame()->evaluateJavaScript(getFastForwardScript(true)).toUrl());
 
-				if (url.isValid())
+				if (fastForwardUrl.isValid())
 				{
-					setUrl(url);
+					setUrl(fastForwardUrl);
 				}
 				else if (canGoForward())
 				{
@@ -813,7 +818,19 @@ void QtWebKitWebWidget::triggerAction(int identifier, const QVariantMap &paramet
 
 				if (parameters.contains(QLatin1String("dictionary")))
 				{
-					setOption(SettingsManager::Browser_SpellCheckDictionaryOption, parameters.value(QLatin1String("dictionary")));
+					const QString dictionary(parameters.value(QLatin1String("dictionary")).toString());
+					QStringList dictionaries(getOption(SettingsManager::Browser_SpellCheckDictionaryOption).toStringList());
+
+					if (dictionaries.contains(dictionary))
+					{
+						dictionaries.removeAll(dictionary);
+					}
+					else
+					{
+						dictionaries.append(dictionary);
+					}
+
+					setOption(SettingsManager::Browser_SpellCheckDictionaryOption, dictionaries);
 				}
 				else
 				{
@@ -848,13 +865,13 @@ void QtWebKitWebWidget::triggerAction(int identifier, const QVariantMap &paramet
 
 				QWebElement searchTermsElement;
 				const QString tagName(element.tagName().toLower());
-				const QUrl url(parentElement.attribute(QLatin1String("action")));
+				const QUrl targetUrl(parentElement.attribute(QLatin1String("action")));
 				const QIcon icon(m_page->mainFrame()->icon());
 				SearchEnginesManager::SearchEngineDefinition searchEngine;
 				searchEngine.title = getTitle();
 				searchEngine.formUrl = getUrl();
 				searchEngine.icon = (icon.isNull() ? ThemesManager::createIcon(QLatin1String("edit-find")) : icon);
-				searchEngine.resultsUrl.url = (url.isEmpty() ? getUrl() : resolveUrl(parentElement.webFrame(), url)).toString();
+				searchEngine.resultsUrl.url = (targetUrl.isEmpty() ? getUrl() : resolveUrl(parentElement.webFrame(), targetUrl)).toString();
 				searchEngine.resultsUrl.enctype = parentElement.attribute(QLatin1String("enctype"));
 				searchEngine.resultsUrl.method = ((parentElement.attribute(QLatin1String("method"), QLatin1String("get")).toLower() == QLatin1String("post")) ? QLatin1String("post") : QLatin1String("get"));
 
@@ -1097,13 +1114,13 @@ void QtWebKitWebWidget::triggerAction(int identifier, const QVariantMap &paramet
 			break;
 		case ActionsManager::WebsitePreferencesAction:
 			{
-				const QUrl url(getUrl());
+				const QUrl pageUrl(getUrl());
 				CookieJar *cookieJar(m_networkManager->getCookieJar());
-				WebsitePreferencesDialog dialog(Utils::extractHost(url), (url.host().isEmpty() ? QVector<QNetworkCookie>() : cookieJar->getCookies(url.host())), this);
+				WebsitePreferencesDialog dialog(Utils::extractHost(pageUrl), (pageUrl.host().isEmpty() ? QVector<QNetworkCookie>() : cookieJar->getCookies(pageUrl.host())), this);
 
 				if (dialog.exec() == QDialog::Accepted)
 				{
-					updateOptions(url);
+					updateOptions(pageUrl);
 
 					const QVector<QNetworkCookie> cookiesToDelete(dialog.getCookiesToDelete());
 					const QVector<QNetworkCookie> cookiesToInsert(dialog.getCookiesToInsert());
@@ -1508,10 +1525,7 @@ void QtWebKitWebWidget::handleHistory()
 	{
 		m_page->history()->currentItem().setUserData(QVariantList({(Utils::isUrlEmpty(url) ? 0 : HistoryManager::addEntry(url, getTitle(), m_page->mainFrame()->icon(), m_isTypedIn)), getZoom(), QPoint(0, 0), QDateTime::currentDateTimeUtc()}));
 
-		if (m_isTypedIn)
-		{
-			m_isTypedIn = false;
-		}
+		m_isTypedIn = false;
 
 		SessionsManager::markSessionAsModified();
 		BookmarksManager::updateVisits(url.toString());
@@ -1656,7 +1670,7 @@ void QtWebKitWebWidget::notifyPermissionRequested(QWebFrame *frame, QWebPage::Fe
 	}
 }
 
-void QtWebKitWebWidget::notifySavePasswordRequested(const PasswordsManager::PasswordInformation &password, bool isUpdate)
+void QtWebKitWebWidget::notifySavePasswordRequested(const PasswordsManager::Password &password, bool isUpdate)
 {
 	emit requestedSavePassword(password, isUpdate);
 }
@@ -1740,7 +1754,7 @@ void QtWebKitWebWidget::clearOptions()
 	updateOptions(getUrl());
 }
 
-void QtWebKitWebWidget::fillPassword(const PasswordsManager::PasswordInformation &password)
+void QtWebKitWebWidget::fillPassword(const PasswordsManager::Password &password)
 {
 	QFile file(QLatin1String(":/modules/backends/web/qtwebkit/resources/formFiller.js"));
 
@@ -2116,7 +2130,7 @@ QPixmap QtWebKitWebWidget::createThumbnail(const QSize &size)
 		return m_thumbnail;
 	}
 
-	const QSize thumbnailSize(size.isValid() ? size : QSize(260, 170));
+	const QSize thumbnailSize(size.isValid() ? size : getDefaultThumbnailSize());
 	const QSize oldViewportSize(m_page->viewportSize());
 	const QPoint position(m_page->mainFrame()->scrollPosition());
 	const qreal zoom(m_page->mainFrame()->zoomFactor());
@@ -2398,7 +2412,7 @@ WebWidget::HitTestResult QtWebKitWebWidget::getHitTestResult(const QPoint &posit
 
 	if (nativeResult.element().evaluateJavaScript(QLatin1String("this.spellcheck")).toBool())
 	{
-		result.flags |= HitTestResult::IsSpellCheckEnabled;
+		result.flags |= HitTestResult::IsSpellCheckEnabledTest;
 	}
 
 	if (result.mediaUrl.isValid())
@@ -2556,6 +2570,11 @@ WebWidget::ContentStates QtWebKitWebWidget::getContentState() const
 	if (getOption(SettingsManager::Security_EnableFraudCheckingOption, url).toBool() && ContentFiltersManager::isFraud(url))
 	{
 		state |= FraudContentState;
+	}
+
+	if (Utils::isUrlAmbiguous(url))
+	{
+		state |= AmbiguousContentState;
 	}
 
 	return state;

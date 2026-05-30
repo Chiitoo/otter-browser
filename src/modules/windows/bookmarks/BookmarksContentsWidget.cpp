@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -20,7 +20,6 @@
 #include "BookmarksContentsWidget.h"
 #include "../../../core/Application.h"
 #include "../../../core/SessionsManager.h"
-#include "../../../core/SettingsManager.h"
 #include "../../../core/ThemesManager.h"
 #include "../../../ui/Action.h"
 #include "../../../ui/BookmarkPropertiesDialog.h"
@@ -32,14 +31,12 @@
 
 #include <QtGui/QClipboard>
 #include <QtGui/QMouseEvent>
-#include <QtWidgets/QDesktopWidget>
 #include <QtWidgets/QMenu>
-#include <QtWidgets/QToolTip>
 
 namespace Otter
 {
 
-BookmarksContentsWidget::BookmarksContentsWidget(const QVariantMap &parameters, Window *window, QWidget *parent) : ContentsWidget(parameters, window, parent),
+BookmarksContentsWidget::BookmarksContentsWidget(const QVariantMap &parameters, Window *window, QWidget *parent) : SpecialPageContentsWidget(QLatin1String("bookmarks"), parameters, window, parent),
 	m_model(nullptr),
 	m_ui(new Ui::BookmarksContentsWidget)
 {
@@ -200,9 +197,9 @@ void BookmarksContentsWidget::showContextMenu(const QPoint &position)
 
 					if (type == BookmarksModel::FolderBookmark && m_model->rowCount(index) == 0)
 					{
-						for (int i = 0; i < menu.actions().count(); ++i)
+						for (QAction *action: menu.actions())
 						{
-							menu.actions().at(i)->setEnabled(false);
+							action->setEnabled(false);
 						}
 					}
 				}
@@ -342,26 +339,6 @@ BookmarksContentsWidget::BookmarkLocation BookmarksContentsWidget::getBookmarkCr
 	return location;
 }
 
-QString BookmarksContentsWidget::getTitle() const
-{
-	return tr("Bookmarks");
-}
-
-QLatin1String BookmarksContentsWidget::getType() const
-{
-	return QLatin1String("bookmarks");
-}
-
-QUrl BookmarksContentsWidget::getUrl() const
-{
-	return {QLatin1String("about:bookmarks")};
-}
-
-QIcon BookmarksContentsWidget::getIcon() const
-{
-	return ThemesManager::createIcon(QLatin1String("bookmarks"), false);
-}
-
 ActionsManager::ActionDefinition::State BookmarksContentsWidget::getActionState(int identifier, const QVariantMap &parameters) const
 {
 	ActionsManager::ActionDefinition::State state(ActionsManager::getActionDefinition(identifier).getDefaultState());
@@ -427,7 +404,7 @@ bool BookmarksContentsWidget::eventFilter(QObject *object, QEvent *event)
 
 		if (bookmark)
 		{
-			QToolTip::showText(helpEvent->globalPos(), QFontMetrics(QToolTip::font()).elidedText(bookmark->toolTip(), Qt::ElideRight, (QApplication::desktop()->screenGeometry(m_ui->bookmarksViewWidget).width() / 2)), m_ui->bookmarksViewWidget, m_ui->bookmarksViewWidget->visualRect(index));
+			Utils::showToolTip(helpEvent->globalPos(), bookmark->toolTip(), m_ui->bookmarksViewWidget, m_ui->bookmarksViewWidget->visualRect(index));
 		}
 
 		return true;

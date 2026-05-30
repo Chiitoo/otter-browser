@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2015 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2016 Piotr Wójcik <chocimier@tlen.pl>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -176,9 +176,12 @@ void CertificateDialog::updateCertificate()
 	extensionsItem->setFlags(Qt::ItemIsEnabled);
 	extensionsItem->setEnabled(certificate.extensions().count() > 0);
 
-	for (int i = 0; i < certificate.extensions().count(); ++i)
+	int index(-1);
+
+	for (const QSslCertificateExtension &extension: certificate.extensions())
 	{
-		QString title(certificate.extensions().at(i).name());
+		const QString name(extension.name());
+		QString title(name);
 
 		if (title == QLatin1String("authorityKeyIdentifier"))
 		{
@@ -249,7 +252,7 @@ void CertificateDialog::updateCertificate()
 			title = tr("Subject Information Access");
 		}
 
-		createField(ExtensionField, extensionsItem, {{Qt::DisplayRole, title}, {ExtensionIndexRole, i}, {ExtensionNameRole, certificate.extensions().at(i).name()}});
+		createField(ExtensionField, extensionsItem, {{Qt::DisplayRole, title}, {ExtensionIndexRole, ++index}, {ExtensionNameRole, name}});
 	}
 
 	QStandardItem *digestItem(createField(DigestField));
@@ -299,9 +302,9 @@ void CertificateDialog::updateValue()
 			{
 				const QList<QByteArray> attributes(certificate.issuerInfoAttributes());
 
-				for (int i = 0; i < attributes.count(); ++i)
+				for (const QByteArray &attribute: attributes)
 				{
-					m_ui->valueTextEditWidget->appendPlainText(QStringLiteral("%1 = %2").arg(QString::fromLatin1(attributes.at(i)), certificate.issuerInfo(attributes.at(i)).join(QLatin1String(", "))));
+					m_ui->valueTextEditWidget->appendPlainText(QStringLiteral("%1 = %2").arg(QString::fromLatin1(attribute), certificate.issuerInfo(attribute).join(QLatin1String(", "))));
 				}
 			}
 
@@ -318,9 +321,9 @@ void CertificateDialog::updateValue()
 			{
 				const QList<QByteArray> attributes(certificate.subjectInfoAttributes());
 
-				for (int i = 0; i < attributes.count(); ++i)
+				for (const QByteArray &attribute: attributes)
 				{
-					m_ui->valueTextEditWidget->appendPlainText(QStringLiteral("%1 = %2").arg(QString::fromLatin1(attributes.at(i)), certificate.subjectInfo(attributes.at(i)).join(QLatin1String(", "))));
+					m_ui->valueTextEditWidget->appendPlainText(QStringLiteral("%1 = %2").arg(QString::fromLatin1(attribute), certificate.subjectInfo(attribute).join(QLatin1String(", "))));
 				}
 			}
 
@@ -356,9 +359,9 @@ void CertificateDialog::updateValue()
 					{
 						const QVariantList list(extension.value().toList());
 
-						for (int i = 0; i < list.count(); ++i)
+						for (const QVariant &entry: list)
 						{
-							m_ui->valueTextEditWidget->appendPlainText(list.at(i).toString());
+							m_ui->valueTextEditWidget->appendPlainText(entry.toString());
 						}
 					}
 					else if (extension.value().type() == QVariant::Map)
@@ -499,14 +502,14 @@ QString CertificateDialog::formatHex(const QString &source, QChar separator)
 	int characterCount(0);
 	int pairCount(0);
 
-	for (int i = 0; i < source.length(); ++i)
+	for (const QChar &character: source)
 	{
-		if (!source.at(i).isLetterOrNumber())
+		if (!character.isLetterOrNumber())
 		{
 			continue;
 		}
 
-		result.append(source.at(i));
+		result.append(character);
 
 		++characterCount;
 

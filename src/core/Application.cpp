@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2015 - 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -41,7 +41,6 @@
 #include "ThemesManager.h"
 #include "TransfersManager.h"
 #include "Utils.h"
-#include "Updater.h"
 #include "WebBackend.h"
 #ifdef Q_OS_WIN
 #include "../modules/platforms/windows/WindowsPlatformIntegration.h"
@@ -59,7 +58,6 @@
 #include "../ui/SessionsManagerDialog.h"
 #include "../ui/Style.h"
 #include "../ui/TrayIcon.h"
-#include "../ui/UpdateCheckerDialog.h"
 #include "../ui/Window.h"
 
 #include <QtCore/QCryptographicHash>
@@ -71,6 +69,9 @@
 #include <QtCore/QRegularExpression>
 #include <QtCore/QStandardPaths>
 #include <QtCore/QStorageInfo>
+#if QT_VERSION < 0x060000
+#include <QtCore/QTextCodec>
+#endif
 #include <QtCore/QTranslator>
 #include <QtGui/QDesktopServices>
 #include <QtNetwork/QLocalSocket>
@@ -109,6 +110,10 @@ Application::Application(int &argc, char **argv) : QApplication(argc, argv),
 	setWindowIcon(QIcon::fromTheme(QLatin1String("otter-browser"), QIcon(QLatin1String(":/icons/otter-browser.png"))));
 
 	m_instance = this;
+
+#if QT_VERSION < 0x060000
+	QTextCodec::setCodecForLocale(QTextCodec::codecForMib(106));
+#endif
 
 	QString profilePath(QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + QLatin1String("/otter"));
 	QString cachePath(QStandardPaths::writableLocation(QStandardPaths::CacheLocation));
@@ -206,7 +211,7 @@ Application::Application(int &argc, char **argv) : QApplication(argc, argv),
 	}
 
 	profilePath = QDir::toNativeSeparators(QFileInfo(profilePath).absoluteFilePath());
-
+///TODO warn if configured backend is not available and ask what to do
 	if (m_commandLineParser.isSet(QLatin1String("cache")))
 	{
 		cachePath = m_commandLineParser.value(QLatin1String("cache"));
@@ -461,7 +466,7 @@ Application::Application(int &argc, char **argv) : QApplication(argc, argv),
 	m_platformIntegration = new FreeDesktopOrgPlatformIntegration(this);
 #endif
 
-	if (Updater::isReadyToInstall())
+	/*if (Updater::isReadyToInstall())
 	{
 		m_isUpdating = Updater::installUpdate();
 
@@ -479,7 +484,7 @@ Application::Application(int &argc, char **argv) : QApplication(argc, argv),
 		connect(new UpdateChecker(this), &UpdateChecker::finished, this, &Application::handleUpdateCheckResult);
 
 		scheduleUpdateCheck(updateCheckInterval);
-	}
+	}*/
 
 	Style *style(ThemesManager::createStyle(SettingsManager::getOption(SettingsManager::Interface_WidgetStyleOption).toString()));
 	QString styleSheet(style->getStyleSheet());
@@ -761,11 +766,11 @@ void Application::triggerAction(int identifier, const QVariantMap &parameters, Q
 
 			return;
 		case ActionsManager::CheckForUpdatesAction:
-			{
+			/*{
 				UpdateCheckerDialog *dialog(new UpdateCheckerDialog(m_activeWindow));
 				dialog->setAttribute(Qt::WA_DeleteOnClose, true);
 				dialog->show();
-			}
+			}*/
 
 			return;
 		case ActionsManager::DiagnosticReportAction:
@@ -820,69 +825,73 @@ void Application::triggerAction(int identifier, const QVariantMap &parameters, Q
 
 	const ActionsManager::ActionDefinition::ActionScope scope(ActionsManager::getActionDefinition(identifier).scope);
 
-	if (scope == ActionsManager::ActionDefinition::MainWindowScope || scope == ActionsManager::ActionDefinition::WindowScope || scope == ActionsManager::ActionDefinition::EditorScope)
+	if (scope != ActionsManager::ActionDefinition::MainWindowScope && scope != ActionsManager::ActionDefinition::WindowScope && scope != ActionsManager::ActionDefinition::EditorScope)
 	{
-		MainWindow *mainWindow(nullptr);
+		return;
+	}
 
-		if (parameters.contains(QLatin1String("window")))
+	MainWindow *mainWindow(nullptr);
+
+	if (parameters.contains(QLatin1String("window")))
+	{
+		const quint64 windowIdentifier(parameters.value(QLatin1String("window")).toULongLong());
+
+		for (int i = 0; i < m_windows.count(); ++i)
 		{
-			const quint64 windowIdentifier(parameters.value(QLatin1String("window")).toULongLong());
+			MainWindow *currentMainWindow(m_windows.at(i));
 
-			for (int i = 0; i < m_windows.count(); ++i)
+			if (currentMainWindow->getIdentifier() == windowIdentifier)
 			{
-				if (m_windows.at(i)->getIdentifier() == windowIdentifier)
-				{
-					mainWindow = m_windows.at(i);
+				mainWindow = currentMainWindow;
 
-					break;
-				}
+				break;
 			}
 		}
-		else
-		{
-			mainWindow = (target ? MainWindow::findMainWindow(target) : m_activeWindow.data());
-		}
+	}
+	else
+	{
+		mainWindow = (target ? MainWindow::findMainWindow(target) : m_activeWindow.data());
+	}
 
-		if (scope == ActionsManager::ActionDefinition::WindowScope)
-		{
-			Window *window(nullptr);
+	if (scope == ActionsManager::ActionDefinition::WindowScope)
+	{
+		Window *window(nullptr);
 
-			if (target)
+		if (target)
+		{
+			if (mainWindow && parameters.contains(QLatin1String("tab")))
 			{
-				if (mainWindow && parameters.contains(QLatin1String("tab")))
+				window = mainWindow->getWindowByIdentifier(parameters[QLatin1String("tab")].toULongLong());
+			}
+			else
+			{
+				while (target)
 				{
-					window = mainWindow->getWindowByIdentifier(parameters[QLatin1String("tab")].toULongLong());
-				}
-				else
-				{
-					while (target)
+					if (target->metaObject()->className() == QLatin1String("Otter::Window"))
 					{
-						if (target->metaObject()->className() == QLatin1String("Otter::Window"))
-						{
-							window = qobject_cast<Window*>(target);
+						window = qobject_cast<Window*>(target);
 
-							break;
-						}
-
-						target = target->parent();
+						break;
 					}
+
+					target = target->parent();
 				}
 			}
-
-			if (!target && mainWindow)
-			{
-				window = mainWindow->getActiveWindow();
-			}
-
-			if (window)
-			{
-				window->triggerAction(identifier, parameters, trigger);
-			}
 		}
-		else if (mainWindow)
+
+		if (!target && mainWindow)
 		{
-			mainWindow->triggerAction(identifier, parameters, trigger);
+			window = mainWindow->getActiveWindow();
 		}
+
+		if (window)
+		{
+			window->triggerAction(identifier, parameters, trigger);
+		}
+	}
+	else if (mainWindow)
+	{
+		mainWindow->triggerAction(identifier, parameters, trigger);
 	}
 }
 
@@ -908,7 +917,7 @@ void Application::removeWindow(MainWindow *mainWindow)
 	}
 }
 
-void Application::scheduleUpdateCheck(int interval)
+/*void Application::scheduleUpdateCheck(quint64 interval)
 {
 	if (m_updateCheckTimer)
 	{
@@ -916,7 +925,7 @@ void Application::scheduleUpdateCheck(int interval)
 	}
 
 	m_updateCheckTimer = new LongTermTimer(this);
-	m_updateCheckTimer->start(static_cast<quint64>(interval * 1000 * 86400));
+	m_updateCheckTimer->start(interval * 1000 * 86400);
 
 	connect(m_updateCheckTimer, &LongTermTimer::timeout, this, [&]()
 	{
@@ -931,7 +940,7 @@ void Application::scheduleUpdateCheck(int interval)
 			scheduleUpdateCheck(interval);
 		}
 	});
-}
+}*/
 
 void Application::handleOptionChanged(int identifier, const QVariant &value)
 {
@@ -1179,34 +1188,35 @@ void Application::handlePositionalArguments(QCommandLineParser *parser, bool for
 	}
 }
 
-void Application::handleUpdateCheckResult(const QVector<UpdateChecker::UpdateInformation> &availableUpdates, int latestVersionIndex)
+/*void Application::handleUpdateCheckResult(const QVector<UpdateChecker::UpdateInformation> &availableUpdates, int latestVersionIndex)
 {
 	if (availableUpdates.isEmpty())
 	{
 		return;
 	}
 
+	const UpdateChecker::UpdateInformation availableUpdate(availableUpdates.at(latestVersionIndex));
+
 	if (SettingsManager::getOption(SettingsManager::Updates_AutomaticInstallOption).toBool())
 	{
-		new Updater(availableUpdates.at(latestVersionIndex), this);
+		new Updater(availableUpdate, this);
 
 		return;
 	}
 
 	Notification::Message message;
-	message.message = tr("New update %1 from %2 channel is available.").arg(availableUpdates.at(latestVersionIndex).version, availableUpdates.at(latestVersionIndex).channel);
+	message.message = tr("New update %1 from %2 channel is available.").arg(availableUpdate.version, availableUpdate.channel);
 	message.icon = windowIcon();
 	message.event = NotificationsManager::UpdateAvailableEvent;
 
 	Notification *notification(NotificationsManager::createNotification(message));
-	notification->setData(QVariant::fromValue<QVector<UpdateChecker::UpdateInformation> >(availableUpdates));
 
-	connect(notification, &Notification::clicked, notification, [&]()
+	connect(notification, &Notification::clicked, notification, [=]()
 	{
-		UpdateCheckerDialog *dialog(new UpdateCheckerDialog(nullptr, notification->getData().value<QVector<UpdateChecker::UpdateInformation> >()));
+		UpdateCheckerDialog *dialog(new UpdateCheckerDialog(nullptr, availableUpdates));
 		dialog->show();
 	});
-}
+}*/
 
 void Application::showNotification(Notification *notification)
 {
@@ -1259,6 +1269,7 @@ void Application::setLocale(const QString &locale)
 		installTranslator(m_applicationTranslator);
 	}
 
+	const QString systemLocale(QLocale::system().name());
 	QString identifier(locale);
 
 	if (locale.endsWith(QLatin1String(".qm")))
@@ -1267,13 +1278,13 @@ void Application::setLocale(const QString &locale)
 	}
 	else if (locale == QLatin1String("system"))
 	{
-		identifier = QLocale::system().name();
+		identifier = systemLocale;
 	}
 
 	const bool useSystemLocale(locale.isEmpty() || locale == QLatin1String("system"));
 
-	m_qtTranslator->load(QLatin1String("qt_") + (useSystemLocale ? QLocale::system().name() : identifier), QLibraryInfo::location(QLibraryInfo::TranslationsPath));
-	m_applicationTranslator->load((locale.endsWith(QLatin1String(".qm")) ? locale : QLatin1String("otter-browser_") + (useSystemLocale ? QLocale::system().name() : locale)), m_localePath);
+	m_qtTranslator->load(QLatin1String("qt_") + (useSystemLocale ? systemLocale : identifier), QLibraryInfo::location(QLibraryInfo::TranslationsPath));
+	m_applicationTranslator->load((locale.endsWith(QLatin1String(".qm")) ? locale : QLatin1String("otter-browser_") + (useSystemLocale ? systemLocale : locale)), m_localePath);
 
 	QLocale::setDefault(Utils::createLocale(identifier));
 }
@@ -1371,19 +1382,21 @@ QString Application::createReport(ReportOptions options)
 	AddonsManager::createInstance();
 
 	const WebBackend *webBackend(AddonsManager::getWebBackend());
+	const QString versionWeekly(QStringLiteral(OTTER_VERSION_WEEKLY).trimmed());
 	const QString gitBranch(QStringLiteral(OTTER_GIT_BRANCH).trimmed());
+	const QString gitRevision(QStringLiteral(OTTER_GIT_REVISION).trimmed());
 	DiagnosticReport report;
 	DiagnosticReport::Section versionReport;
 	versionReport.title = QLatin1String("Version");
 	versionReport.fieldWidths = {20, 0};
 	versionReport.entries.reserve(7);
 	versionReport.entries.append({QLatin1String("Main Number"), OTTER_VERSION_MAIN});
-	versionReport.entries.append({QLatin1String("Weekly Number"), (QStringLiteral(OTTER_VERSION_WEEKLY).trimmed().isEmpty() ? QString(QLatin1Char('-')) : OTTER_VERSION_WEEKLY)});
+	versionReport.entries.append({QLatin1String("Weekly Number"), (versionWeekly.isEmpty() ? QString(QLatin1Char('-')) : versionWeekly)});
 	versionReport.entries.append({QLatin1String("Context"), OTTER_VERSION_CONTEXT});
 	versionReport.entries.append({QLatin1String("Web Backend"), (webBackend ? QStringLiteral("%1 %2").arg(webBackend->getTitle(), webBackend->getEngineVersion()) : QLatin1String("none"))});
 	versionReport.entries.append({QLatin1String("Build Date"), QDateTime::fromString(OTTER_BUILD_DATETIME, Qt::ISODate).toUTC().toString(Qt::ISODate)});
-	versionReport.entries.append({QLatin1String("Git Branch"), ((gitBranch.isEmpty() || gitBranch == QLatin1String("unknown")) ? QString(QLatin1Char('-')) : OTTER_GIT_BRANCH)});
-	versionReport.entries.append({QLatin1String("Git Revision"), ((QStringLiteral(OTTER_GIT_REVISION).trimmed().isEmpty() || QStringLiteral(OTTER_GIT_REVISION) == QLatin1String("unknown")) ? QString(QLatin1Char('-')) : QStringLiteral("%1 (%2)").arg(OTTER_GIT_REVISION).arg(QDateTime::fromString(OTTER_GIT_DATETIME, Qt::ISODate).toUTC().toString(Qt::ISODate)))});
+	versionReport.entries.append({QLatin1String("Git Branch"), ((gitBranch.isEmpty() || gitBranch == QLatin1String("unknown")) ? QString(QLatin1Char('-')) : gitBranch)});
+	versionReport.entries.append({QLatin1String("Git Revision"), ((gitRevision.isEmpty() || gitRevision == QLatin1String("unknown")) ? QString(QLatin1Char('-')) : QStringLiteral("%1 (%2)").arg(gitRevision, QDateTime::fromString(QStringLiteral(OTTER_GIT_DATETIME).trimmed(), Qt::ISODate).toUTC().toString(Qt::ISODate)))});
 
 	report.sections.append(versionReport);
 

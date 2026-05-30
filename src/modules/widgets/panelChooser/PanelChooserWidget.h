@@ -1,7 +1,7 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
 * Copyright (C) 2015 Piotr Wójcik <chocimier@tlen.pl>
-* Copyright (C) 2015 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -38,11 +38,9 @@ public:
 
 protected:
 	void updateText();
-	int getSideBarIdentifier() const;
 
-protected slots:
-	void populateMenu();
-	void selectPanel(QAction *action);
+private:
+	int m_toolBarIdentifier;
 };
 
 }

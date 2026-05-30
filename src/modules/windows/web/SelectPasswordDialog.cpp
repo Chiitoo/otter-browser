@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2016 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2016 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -28,24 +28,25 @@
 namespace Otter
 {
 
-SelectPasswordDialog::SelectPasswordDialog(const QVector<PasswordsManager::PasswordInformation> &passwords, QWidget *parent) : Dialog(parent),
+SelectPasswordDialog::SelectPasswordDialog(const QVector<PasswordsManager::Password> &passwords, QWidget *parent) : Dialog(parent),
 	m_passwords(passwords),
 	m_ui(new Ui::SelectPasswordDialog)
 {
 	m_ui->setupUi(this);
 
+	int index(0);
 	QStandardItemModel *model(new QStandardItemModel(this));
 	model->setHorizontalHeaderLabels({tr("Name"), tr("Value")});
 
-	for (int i = 0; i < passwords.count(); ++i)
+	for (const PasswordsManager::Password &password: passwords)
 	{
-		const PasswordsManager::PasswordInformation password(passwords.at(i));
-		QStandardItem *setItem(new QStandardItem(tr("Set #%1").arg(i + 1)));
-		setItem->setData(i, Qt::UserRole);
+		QStandardItem *setItem(new QStandardItem(tr("Set #%1").arg(index + 1)));
+		setItem->setData(index, Qt::UserRole);
 
-		for (int j = 0; j < password.fields.count(); ++j)
+		++index;
+
+		for (const PasswordsManager::Password::Field &field: password.fields)
 		{
-			const PasswordsManager::PasswordInformation::Field field(password.fields.at(j));
 			QList<QStandardItem*> fieldItems({new QStandardItem(field.name), new QStandardItem((field.type == PasswordsManager::PasswordField) ? QLatin1String("*****") : field.value)});
 			fieldItems[0]->setFlags(fieldItems[0]->flags() | Qt::ItemNeverHasChildren);
 			fieldItems[1]->setFlags(fieldItems[1]->flags() | Qt::ItemNeverHasChildren);
@@ -86,7 +87,7 @@ void SelectPasswordDialog::removePassword()
 {
 	const int currentSet(getCurrentSet());
 
-	if (currentSet < 0 || currentSet >= m_passwords.count() || QMessageBox::question(this, tr("Question"), tr("Do you really want to remove this credentials set?"), QMessageBox::Yes, QMessageBox::No) == QMessageBox::No)
+	if (currentSet < 0 || currentSet >= m_passwords.count() || QMessageBox::question(this, tr("Question"), tr("Do you really want to remove this credentials set?"), (QMessageBox::Yes | QMessageBox::No), QMessageBox::No) == QMessageBox::No)
 	{
 		return;
 	}
@@ -120,7 +121,7 @@ void SelectPasswordDialog::updateActions()
 	m_ui->removeButton->setEnabled(currentSet >= 0 && currentSet < m_ui->passwordsViewWidget->getRowCount());
 }
 
-PasswordsManager::PasswordInformation SelectPasswordDialog::getPassword() const
+PasswordsManager::Password SelectPasswordDialog::getPassword() const
 {
 	return m_passwords.value(getCurrentSet());
 }

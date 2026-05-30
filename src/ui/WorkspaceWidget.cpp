@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -306,9 +306,10 @@ void WorkspaceWidget::createMdi()
 
 	for (int i = 0; i < windows.count(); ++i)
 	{
-		windows.at(i)->setVisible(true);
+		Window *window(windows.at(i));
+		window->setVisible(true);
 
-		addWindow(windows.at(i));
+		addWindow(window);
 	}
 
 	if (wasRestored)
@@ -317,7 +318,23 @@ void WorkspaceWidget::createMdi()
 		markAsRestored();
 	}
 
-	connect(m_mdi, &MdiWidget::customContextMenuRequested, this, &WorkspaceWidget::showContextMenu);
+	connect(m_mdi, &MdiWidget::customContextMenuRequested, this, [&](const QPoint &position)
+	{
+		ActionExecutor::Object executor(m_mainWindow, m_mainWindow);
+		QMenu menu(this);
+		QMenu *arrangeMenu(menu.addMenu(tr("Arrange")));
+		arrangeMenu->addAction(new Action(ActionsManager::RestoreTabAction, {}, executor, arrangeMenu));
+		arrangeMenu->addSeparator();
+		arrangeMenu->addAction(new Action(ActionsManager::RestoreAllAction, {}, executor, arrangeMenu));
+		arrangeMenu->addAction(new Action(ActionsManager::MaximizeAllAction, {}, executor, arrangeMenu));
+		arrangeMenu->addAction(new Action(ActionsManager::MinimizeAllAction, {}, executor, arrangeMenu));
+		arrangeMenu->addSeparator();
+		arrangeMenu->addAction(new Action(ActionsManager::CascadeAllAction, {}, executor, arrangeMenu));
+		arrangeMenu->addAction(new Action(ActionsManager::TileAllAction, {}, executor, arrangeMenu));
+
+		menu.addMenu(new Menu(Menu::ToolBarsMenu, &menu));
+		menu.exec(m_mdi->mapToGlobal(position));
+	});
 }
 
 void WorkspaceWidget::triggerAction(int identifier, const QVariantMap &parameters, ActionsManager::TriggerType trigger)
@@ -353,11 +370,6 @@ void WorkspaceWidget::triggerAction(int identifier, const QVariantMap &parameter
 	if (!hasSpecifiedWindow)
 	{
 		subWindow = qobject_cast<MdiWindow*>(m_mdi->currentSubWindow());
-
-		if (subWindow)
-		{
-			window = subWindow->getWindow();
-		}
 	}
 	else if (window)
 	{
@@ -662,24 +674,6 @@ void WorkspaceWidget::notifyActionsStateChanged()
 	{
 		emit arbitraryActionsStateChanged({ActionsManager::MaximizeAllAction, ActionsManager::MinimizeAllAction, ActionsManager::RestoreAllAction, ActionsManager::CascadeAllAction, ActionsManager::TileAllAction});
 	}
-}
-
-void WorkspaceWidget::showContextMenu(const QPoint &position)
-{
-	ActionExecutor::Object executor(m_mainWindow, m_mainWindow);
-	QMenu menu(this);
-	QMenu *arrangeMenu(menu.addMenu(tr("Arrange")));
-	arrangeMenu->addAction(new Action(ActionsManager::RestoreTabAction, {}, executor, arrangeMenu));
-	arrangeMenu->addSeparator();
-	arrangeMenu->addAction(new Action(ActionsManager::RestoreAllAction, {}, executor, arrangeMenu));
-	arrangeMenu->addAction(new Action(ActionsManager::MaximizeAllAction, {}, executor, arrangeMenu));
-	arrangeMenu->addAction(new Action(ActionsManager::MinimizeAllAction, {}, executor, arrangeMenu));
-	arrangeMenu->addSeparator();
-	arrangeMenu->addAction(new Action(ActionsManager::CascadeAllAction, {}, executor, arrangeMenu));
-	arrangeMenu->addAction(new Action(ActionsManager::TileAllAction, {}, executor, arrangeMenu));
-
-	menu.addMenu(new Menu(Menu::ToolBarsMenu, &menu));
-	menu.exec(m_mdi->mapToGlobal(position));
 }
 
 void WorkspaceWidget::setActiveWindow(Window *window, bool force)

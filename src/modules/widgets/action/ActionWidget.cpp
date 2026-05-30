@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2016 Piotr Wójcik <chocimier@tlen.pl>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -20,7 +20,6 @@
 
 #include "ActionWidget.h"
 #include "../../../core/Application.h"
-#include "../../../core/HistoryManager.h"
 #include "../../../ui/Action.h"
 #include "../../../ui/ContentsWidget.h"
 #include "../../../ui/MainWindow.h"
@@ -40,9 +39,11 @@ ActionWidget::ActionWidget(int identifier, Window *window, const ToolBarsManager
 	setDefaultAction(m_action);
 	setWindow(window);
 
-	if (definition.options.contains(QLatin1String("icon")))
+	const QVariantMap options(definition.options);
+
+	if (options.contains(QLatin1String("icon")))
 	{
-		const QVariant data(definition.options[QLatin1String("icon")]);
+		const QVariant data(options[QLatin1String("icon")]);
 
 		if (data.type() == QVariant::Icon)
 		{
@@ -54,9 +55,9 @@ ActionWidget::ActionWidget(int identifier, Window *window, const ToolBarsManager
 		}
 	}
 
-	if (definition.options.contains(QLatin1String("text")))
+	if (options.contains(QLatin1String("text")))
 	{
-		m_action->setTextOverride(definition.options[QLatin1String("text")].toString());
+		m_action->setTextOverride(options[QLatin1String("text")].toString());
 	}
 
 	switch (identifier)
@@ -152,19 +153,21 @@ void ActionWidget::dropEvent(QDropEvent *event)
 
 	QVariantMap parameters(getParameters());
 	const QVector<QUrl> urls(Utils::extractUrls(event->mimeData()));
-	SessionsManager::OpenHints hints(SessionsManager::calculateOpenHints(((m_action->getIdentifier() == ActionsManager::NewWindowAction || m_action->getIdentifier() == ActionsManager::NewWindowPrivateAction) ? SessionsManager::NewWindowOpen : SessionsManager::NewTabOpen), Qt::LeftButton, event->keyboardModifiers()));
+	const int identifier(getIdentifier());
+	const bool isNewTab(identifier == ActionsManager::NewTabPrivateAction || identifier == ActionsManager::NewWindowPrivateAction);
+	SessionsManager::OpenHints hints(SessionsManager::calculateOpenHints((isNewTab ? SessionsManager::NewWindowOpen : SessionsManager::NewTabOpen), Qt::LeftButton, event->keyboardModifiers()));
 
-	if (m_action->getIdentifier() == ActionsManager::NewTabPrivateAction || m_action->getIdentifier() == ActionsManager::NewWindowPrivateAction)
+	if (isNewTab)
 	{
 		hints |= SessionsManager::PrivateOpen;
 	}
 
 	parameters[QLatin1String("hints")] = QVariant(hints);
 
-	for (int i = 0; i < urls.count(); ++i)
+	for (const QUrl &url: urls)
 	{
 		QVariantMap actionParameters(parameters);
-		actionParameters[QLatin1String("url")] = urls.at(i);
+		actionParameters[QLatin1String("url")] = url;
 
 		Application::triggerAction(ActionsManager::OpenUrlAction, actionParameters, this);
 	}
@@ -296,7 +299,8 @@ bool NavigationActionWidget::event(QEvent *event)
 			}
 		case QEvent::ToolTip:
 			{
-				const QKeySequence shortcut(ActionsManager::getActionShortcut(getIdentifier()));
+				const int identifier(getIdentifier());
+				const QKeySequence shortcut(ActionsManager::getActionShortcut(identifier));
 				QString toolTip(Utils::appendShortcut(text(), shortcut));
 
 				if (m_window)
@@ -307,11 +311,11 @@ bool NavigationActionWidget::event(QEvent *event)
 					{
 						int index(-1);
 
-						if (getIdentifier() == ActionsManager::GoBackAction && history.index > 0)
+						if (identifier == ActionsManager::GoBackAction && history.index > 0)
 						{
 							index = (history.index - 1);
 						}
-						else if (getIdentifier() == ActionsManager::GoForwardAction && history.index < (history.entries.count() - 1))
+						else if (identifier == ActionsManager::GoForwardAction && history.index < (history.entries.count() - 1))
 						{
 							index = (history.index + 1);
 						}
@@ -342,7 +346,7 @@ bool NavigationActionWidget::eventFilter(QObject *object, QEvent *event)
 
 		if (action && action->getIdentifier() == ActionsManager::GoToHistoryIndexAction)
 		{
-			ActionExecutor::Object executor(m_window, m_window);
+			const ActionExecutor::Object executor(m_window, m_window);
 			const int index(action->getParameters().value(QLatin1String("index")).toInt());
 			QMenu contextMenu(menu());
 			Action *removeEntryAction(new Action(ActionsManager::RemoveHistoryIndexAction, {{QLatin1String("index"), index}}, executor, &contextMenu));

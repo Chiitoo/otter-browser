@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 - 2015 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -24,6 +24,7 @@
 #include "SettingsManager.h"
 #include "Utils.h"
 
+#include <QtCore/QCoreApplication>
 #include <QtCore/QEventLoop>
 #include <QtCore/QFileInfo>
 #include <QtCore/QRegularExpression>
@@ -71,7 +72,7 @@ InputInterpreter::InterpreterResult InputInterpreter::interpret(const QString &t
 
 	if (text.startsWith(QLatin1String("bookmarks:")))
 	{
-		BookmarksModel::Bookmark *bookmark(text.startsWith(QLatin1String("bookmarks:/")) ? BookmarksManager::getModel()->getBookmarkByPath(text.mid(11)) : BookmarksManager::getBookmark(text.midRef(10).toULongLong()));
+		BookmarksModel::Bookmark *bookmark(text.startsWith(QLatin1String("bookmarks:/")) ? BookmarksManager::getModel()->getBookmarkByPath(text.mid(11)) : BookmarksManager::getBookmark(text.mid(10).toULongLong()));
 
 		if (bookmark)
 		{
@@ -146,7 +147,7 @@ InputInterpreter::InterpreterResult InputInterpreter::interpret(const QString &t
 			QTimer timer;
 			timer.setSingleShot(true);
 
-			connect(&timer, &QTimer::timeout, [&]()
+			connect(&timer, &QTimer::timeout, QCoreApplication::instance(), [&]()
 			{
 				QHostInfo::abortHostLookup(lookupIdentifier);
 

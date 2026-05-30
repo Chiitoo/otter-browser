@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2022 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2022 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -18,7 +18,6 @@
 **************************************************************************/
 
 #include "DictionariesPage.h"
-#include "../../../ui/ItemViewWidget.h"
 
 #include <QtCore/QDir>
 #include <QtCore/QFileInfo>
@@ -26,6 +25,9 @@
 
 namespace Otter
 {
+///TODO
+/// allow to disable dictionaries
+/// connect to dictionaries changed signal
 
 DictionariesPage::DictionariesPage(bool needsDetails, QWidget *parent) : AddonsPage(needsDetails, parent)
 {
@@ -67,7 +69,7 @@ void DictionariesPage::updateAddonEntry(Addon *addon)
 
 void DictionariesPage::delayedLoad()
 {
-	const QVector<SpellCheckManager::DictionaryInformation> dictionaries(SpellCheckManager::getDictionaries());
+	const QVector<SpellCheckManager::Dictionary> dictionaries(SpellCheckManager::getDictionaries());
 
 	for (int i = 0; i < dictionaries.count(); ++i)
 	{
@@ -88,11 +90,10 @@ void DictionariesPage::addAddon()
 
 	QString language;
 	bool hasAff(false);
-	bool hasDic(false);
 
-	for (int i = 0; i < sourcePaths.count(); ++i)
+	for (const QString &path: sourcePaths)
 	{
-		const QFileInfo fileInformation(sourcePaths.at(i));
+		const QFileInfo fileInformation(path);
 		const QString suffix(fileInformation.suffix().toLower());
 
 		if (suffix == QLatin1String("aff"))
@@ -102,13 +103,12 @@ void DictionariesPage::addAddon()
 		else if (suffix == QLatin1String("dic"))
 		{
 			language = fileInformation.baseName();
-			hasDic = true;
 		}
 	}
 
-	if (hasAff && hasDic)
+	if (hasAff && !language.isEmpty())
 	{
-		SpellCheckManager::DictionaryInformation dictionary;
+		SpellCheckManager::Dictionary dictionary;
 		dictionary.language = language;
 		dictionary.paths = sourcePaths;
 
@@ -119,17 +119,15 @@ void DictionariesPage::addAddon()
 void DictionariesPage::openAddons()
 {
 	const QStringList selectedDictionaries(getSelectedDictionaries());
-	QStringList paths;
-	paths.reserve(selectedDictionaries.count() * 2);
 
-	for (int i = 0; i < selectedDictionaries.count(); ++i)
+	for (const QString &identifier: selectedDictionaries)
 	{
-		paths.append(SpellCheckManager::getDictionary(selectedDictionaries.at(i)).paths);
-	}
+		const QStringList paths(SpellCheckManager::getDictionary(identifier).paths);
 
-	for (int i = 0; i < paths.count(); ++i)
-	{
-		Utils::runApplication({}, paths.at(i));
+		for (const QString &path: paths)
+		{
+			Utils::runApplication({}, path);
+		}
 	}
 }
 
@@ -142,23 +140,23 @@ void DictionariesPage::removeAddons()
 		return;
 	}
 
-	bool hasAddonsToRemove(false);
+	bool hasDictionariesToRemove(false);
 
 	m_filesToRemove.reserve(m_filesToRemove.count() + (dictionaries.count() * 2));
 
-	for (int i = 0; i < dictionaries.count(); ++i)
+	for (const QString &identifier: dictionaries)
 	{
-		const SpellCheckManager::DictionaryInformation information(SpellCheckManager::getDictionary(dictionaries.at(i)));
+		const SpellCheckManager::Dictionary dictionary(SpellCheckManager::getDictionary(identifier));
 
-		if (information.isLocalDictionary)
+		if (dictionary.isLocalDictionary)
 		{
-			m_filesToRemove.append(information.paths);
+			m_filesToRemove.append(dictionary.paths);
 
-			hasAddonsToRemove = true;
+			hasDictionariesToRemove = true;
 		}
 	}
 
-	if (hasAddonsToRemove)
+	if (hasDictionariesToRemove)
 	{
 		emit settingsModified();
 	}
@@ -178,13 +176,13 @@ void DictionariesPage::updateDetails()
 
 	if (selectedDictionaries.count() == 1)
 	{
-		SpellCheckManager::DictionaryInformation information(SpellCheckManager::getDictionary(selectedDictionaries.first()));
+		SpellCheckManager::Dictionary dictionary(SpellCheckManager::getDictionary(selectedDictionaries.first()));
 
-		if (information.isValid())
+		if (dictionary.isValid())
 		{
-			titleEntry.value = Dictionary(information, this).getTitle();
-			codeEntry.value = information.language;
-			locationEntry.value = QFileInfo(information.paths.at(0)).absolutePath();
+			titleEntry.value = Dictionary(dictionary, this).getTitle();
+			codeEntry.value = dictionary.language;
+			locationEntry.value = QFileInfo(dictionary.paths.at(0)).absolutePath();
 		}
 	}
 
@@ -196,25 +194,17 @@ void DictionariesPage::save()
 	const QString dictionariesPath(SpellCheckManager::getDictionariesPath());
 	const QDir dictionariesDirectory(dictionariesPath);
 
-	Utils::ensureDirectoryExists(dictionariesPath);
-
-	for (int i = 0; i < m_filesToRemove.count(); ++i)
-	{
-		QFile::remove(m_filesToRemove.at(i));
-	}
+	Utils::removeFiles(m_filesToRemove);
 
 	m_filesToRemove.clear();
 
-	for (int i = 0; i < m_dictionariesToAdd.count(); ++i)
+	Utils::ensureDirectoryExists(dictionariesPath);
+
+	for (const SpellCheckManager::Dictionary &dictionary: std::as_const(m_dictionariesToAdd))
 	{
-		const QString language(m_dictionariesToAdd.at(i).language);
-		const QStringList paths(m_dictionariesToAdd.at(i).paths);
-
-		for (int j = 0; j < paths.count(); ++j)
+		for (const QString &path: dictionary.paths)
 		{
-			const QString path(paths.at(j));
-
-			QFile::copy(path, dictionariesDirectory.filePath(language + QFileInfo(path).suffix()));
+			QFile::copy(path, dictionariesDirectory.filePath(dictionary.language + QFileInfo(path).suffix()));
 		}
 	}
 

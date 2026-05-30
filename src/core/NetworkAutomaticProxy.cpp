@@ -1,7 +1,7 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
 * Copyright (C) 2014 Jan Bajer aka bajasoft <jbajer@gmail.com>
-* Copyright (C) 2014 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2014 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -61,10 +61,8 @@ QString PacUtils::myIpAddress() const
 {
 	const QList<QHostAddress> addresses(QNetworkInterface::allAddresses());
 
-	for (int i = 0; i < addresses.count(); ++i)
+	for (const QHostAddress &address: addresses)
 	{
-		const QHostAddress address(addresses.at(i));
-
 		if (!address.isNull() && address != QHostAddress::LocalHost && address != QHostAddress::LocalHostIPv6 && address != QHostAddress::Null && address != QHostAddress::Broadcast && address != QHostAddress::Any && address != QHostAddress::AnyIPv6)
 		{
 			return address.toString();
@@ -78,7 +76,7 @@ int PacUtils::dnsDomainLevels(const QString &host) const
 {
 	if (host.startsWith(QLatin1String("www."), Qt::CaseInsensitive))
 	{
-		return host.midRef(4).count(QLatin1Char('.'));
+		return host.mid(4).count(QLatin1Char('.'));
 	}
 
 	return host.count(QLatin1Char('.'));
@@ -136,20 +134,21 @@ bool PacUtils::weekdayRange(QString fromDay, QString toDay, const QString &gmt) 
 	const int currentDay(((gmt.toLower() == QLatin1String("gmt")) ? QDateTime::currentDateTimeUtc() : QDateTime::currentDateTime()).date().dayOfWeek());
 	int fromDayNumber(-1);
 	int toDayNumber(-1);
+	int number(1);
 
-	for (int i = 0; i < m_days.count(); ++i)
+	for (const QString &day: std::as_const(m_days))
 	{
-		const QString day(m_days.at(i));
-
 		if (fromDay == day)
 		{
-			fromDayNumber = (i + 1);
+			fromDayNumber = number;
 		}
 
 		if (toDay == day)
 		{
-			toDayNumber = (i + 1);
+			toDayNumber = number;
 		}
+
+		++number;
 	}
 
 	if (toDayNumber == -1)
@@ -167,10 +166,8 @@ bool PacUtils::dateRange(const QVariant &arg1, const QVariant &arg2, const QVari
 	QVector<int> arguments;
 	arguments.reserve(6);
 
-	for (int i = 0; i < rawArguments.count(); ++i)
+	for (const QVariant &rawArgument: rawArguments)
 	{
-		const QVariant rawArgument(rawArguments.at(i));
-
 		if (rawArgument.isNull())
 		{
 			break;
@@ -255,10 +252,8 @@ bool PacUtils::timeRange(const QVariant &arg1, const QVariant &arg2, const QVari
 	QVector<int> arguments;
 	arguments.reserve(6);
 
-	for (int i = 0; i < rawArguments.count(); ++i)
+	for (const QVariant &rawArgument: rawArguments)
 	{
-		const QVariant rawArgument(rawArguments.at(i));
-
 		if (rawArgument.isNull())
 		{
 			break;
@@ -271,6 +266,8 @@ bool PacUtils::timeRange(const QVariant &arg1, const QVariant &arg2, const QVari
 
 		arguments.append(rawArgument.toInt());
 	}
+
+	arguments.squeeze();
 
 	if (arguments.count() == 1)
 	{
@@ -318,9 +315,9 @@ NetworkAutomaticProxy::NetworkAutomaticProxy(const QString &path, QObject *paren
 
 	const QStringList functions({QLatin1String("alert"), QLatin1String("dnsResolve"), QLatin1String("myIpAddress"), QLatin1String("dnsDomainLevels"), QLatin1String("isInNet"), QLatin1String("isPlainHostName"), QLatin1String("isResolvable"), QLatin1String("localHostOrDomainIs"), QLatin1String("dnsDomainIs"), QLatin1String("shExpMatch"), QLatin1String("weekdayRange"), QLatin1String("dateRange"), QLatin1String("timeRange")});
 
-	for (int i = 0; i < functions.count(); ++i)
+	for (const QString &function: functions)
 	{
-		m_engine.evaluate(QStringLiteral("function %1() { return PacUtils.%1.apply(null, arguments); }").arg(functions.at(i))).isError();
+		m_engine.evaluate(QStringLiteral("function %1() { return PacUtils.%1.apply(null, arguments); }").arg(function)).isError();
 	}
 
 	m_proxies.insert(QLatin1String("ERROR"), QVector<QNetworkProxy>({QNetworkProxy(QNetworkProxy::DefaultProxy)}));
@@ -345,35 +342,35 @@ void NetworkAutomaticProxy::setPath(const QString &path)
 		{
 			Console::addMessage(tr("Failed to load proxy auto-config (PAC): %1").arg(file.errorString()), Console::NetworkCategory, Console::ErrorLevel, path);
 		}
+
+		return;
+	}
+
+	const QUrl url(path);
+
+	if (url.isValid())
+	{
+		DataFetchJob *job(new DataFetchJob(url, this));
+
+		connect(job, &Job::jobFinished, this, [=](bool isSuccess)
+		{
+			QIODevice *device(job->getData());
+
+			if (isSuccess && device && setup(QString::fromLatin1(device->readAll())))
+			{
+				m_isValid = true;
+			}
+			else
+			{
+				Console::addMessage(tr("Failed to load proxy auto-config (PAC): %1").arg(device ? device->errorString() : tr("Download failure")), Console::NetworkCategory, Console::ErrorLevel, url.url());
+			}
+		});
+
+		job->start();
 	}
 	else
 	{
-		const QUrl url(path);
-
-		if (url.isValid())
-		{
-			DataFetchJob *job(new DataFetchJob(url, this));
-
-			connect(job, &Job::jobFinished, this, [=](bool isSuccess)
-			{
-				QIODevice *device(job->getData());
-
-				if (isSuccess && device && setup(QString::fromLatin1(device->readAll())))
-				{
-					m_isValid = true;
-				}
-				else
-				{
-					Console::addMessage(tr("Failed to load proxy auto-config (PAC): %1").arg(device ? device->errorString() : tr("Download failure")), Console::NetworkCategory, Console::ErrorLevel, url.url());
-				}
-			});
-
-			job->start();
-		}
-		else
-		{
-			Console::addMessage(tr("Failed to load proxy auto-config (PAC). Invalid URL: %1").arg(url.url()), Console::NetworkCategory, Console::ErrorLevel);
-		}
+		Console::addMessage(tr("Failed to load proxy auto-config (PAC). Invalid URL: %1").arg(url.url()), Console::NetworkCategory, Console::ErrorLevel);
 	}
 }
 
@@ -384,7 +381,7 @@ QString NetworkAutomaticProxy::getPath() const
 
 QVector<QNetworkProxy> NetworkAutomaticProxy::getProxy(const QString &url, const QString &host)
 {
-	const QJSValue result(m_findProxy.call(QJSValueList({m_engine.toScriptValue(url), m_engine.toScriptValue(host)})));
+	const QJSValue result(m_findProxyFunction.call(QJSValueList({m_engine.toScriptValue(url), m_engine.toScriptValue(host)})));
 
 	if (result.isError())
 	{
@@ -407,22 +404,28 @@ QVector<QNetworkProxy> NetworkAutomaticProxy::getProxy(const QString &url, const
 	{
 		const QStringList proxy(proxies.at(i).split(QLatin1Char(':')));
 		QString proxyHost(proxy.at(0));
+		const int proxyCount(proxy.count());
 
-		if (proxy.count() == 2 && proxyHost.indexOf(QLatin1String("PROXY"), Qt::CaseInsensitive) == 0)
+		if (proxyCount == 2)
 		{
-			proxiesForQuery.append(QNetworkProxy(QNetworkProxy::HttpProxy, proxyHost.replace(0, 5, QString()), proxy.at(1).toUShort()));
+			const ushort proxyPort(proxy.at(1).toUShort());
 
-			continue;
+			if (proxyHost.indexOf(QLatin1String("PROXY"), Qt::CaseInsensitive) == 0)
+			{
+				proxiesForQuery.append(QNetworkProxy(QNetworkProxy::HttpProxy, proxyHost.remove(0, 5), proxyPort));
+
+				continue;
+			}
+
+			if (proxyHost.indexOf(QLatin1String("SOCKS"), Qt::CaseInsensitive) == 0)
+			{
+				proxiesForQuery.append(QNetworkProxy(QNetworkProxy::Socks5Proxy, proxyHost.remove(0, 5), proxyPort));
+
+				continue;
+			}
 		}
 
-		if (proxy.count() == 2 && proxyHost.indexOf(QLatin1String("SOCKS"), Qt::CaseInsensitive) == 0)
-		{
-			proxiesForQuery.append(QNetworkProxy(QNetworkProxy::Socks5Proxy, proxyHost.replace(0, 5, QString()), proxy.at(1).toUShort()));
-
-			continue;
-		}
-
-		if (proxy.count() == 1 && proxyHost.indexOf(QLatin1String("DIRECT"), Qt::CaseInsensitive) == 0)
+		if (proxyCount == 1 && proxyHost.indexOf(QLatin1String("DIRECT"), Qt::CaseInsensitive) == 0)
 		{
 			proxiesForQuery.append(QNetworkProxy(QNetworkProxy::NoProxy));
 
@@ -451,9 +454,9 @@ bool NetworkAutomaticProxy::setup(const QString &script)
 		return false;
 	}
 
-	m_findProxy = m_engine.globalObject().property(QLatin1String("FindProxyForURL"));
+	m_findProxyFunction = m_engine.globalObject().property(QLatin1String("FindProxyForURL"));
 
-	return m_findProxy.isCallable();
+	return m_findProxyFunction.isCallable();
 }
 
 }

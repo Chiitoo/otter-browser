@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 - 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
 * Copyright (C) 2014 Piotr Wójcik <chocimier@tlen.pl>
 *
@@ -656,7 +656,7 @@ void AddressWidget::mouseReleaseEvent(QMouseEvent *event)
 						else
 						{
 							QMenu menu;
-							menu.addAction(tr("Add to Bookmarks"), [&]()
+							menu.addAction(tr("Add to Bookmarks"), this, [&]()
 							{
 								if (m_window)
 								{
@@ -664,7 +664,7 @@ void AddressWidget::mouseReleaseEvent(QMouseEvent *event)
 									dialog.exec();
 								}
 							}, ActionsManager::getActionShortcut(ActionsManager::BookmarkPageAction))->setShortcutContext(Qt::WidgetShortcut);
-							menu.addAction(tr("Add to Start Page"), [&]()
+							menu.addAction(tr("Add to Start Page"), this, [&]()
 							{
 								if (m_window)
 								{
@@ -1018,6 +1018,10 @@ void AddressWidget::updateEntries(const QVector<EntryIdentifier> &identifiers)
 					if (state.testFlag(WebWidget::FraudContentState))
 					{
 						definition.iconName = QLatin1String("badge-fraud");
+					}
+					else if (state.testFlag(WebWidget::AmbiguousContentState))
+					{
+						definition.iconName = QLatin1String("badge-ambiguous");
 					}
 					else if (state.testFlag(WebWidget::MixedContentState))
 					{
@@ -1416,11 +1420,13 @@ void AddressWidget::setWindow(Window *window)
 			}
 		});
 
-		if (window->getWebWidget())
-		{
-			window->getWebWidget()->startWatchingChanges(this, WebWidget::FeedsWatcher);
+		WebWidget *webWidget(window->getWebWidget());
 
-			connect(window->getWebWidget(), &WebWidget::watchedDataChanged, this, &AddressWidget::handleWatchedDataChanged);
+		if (webWidget)
+		{
+			webWidget->startWatchingChanges(this, WebWidget::FeedsWatcher);
+
+			connect(webWidget, &WebWidget::watchedDataChanged, this, &AddressWidget::handleWatchedDataChanged);
 		}
 
 		const ToolBarWidget *toolBar(qobject_cast<ToolBarWidget*>(parentWidget()));

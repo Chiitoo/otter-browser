@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -25,7 +25,6 @@
 #include "NotificationsManager.h"
 #include "SessionsManager.h"
 #include "Utils.h"
-#include "../ui/MainWindow.h"
 
 #include <QtCore/QDir>
 #include <QtCore/QMimeDatabase>
@@ -33,8 +32,8 @@
 #include <QtCore/QStandardPaths>
 #include <QtCore/QTemporaryFile>
 #include <QtCore/QTimer>
+#include <QtCore/QTimeZone>
 #include <QtNetwork/QAbstractNetworkCache>
-#include <QtWidgets/QFileIconProvider>
 #include <QtWidgets/QMessageBox>
 
 namespace Otter
@@ -85,8 +84,8 @@ Transfer::Transfer(const QSettings &settings, QObject *parent) : QObject(parent 
 	m_isSelectingPath(false),
 	m_isArchived(true)
 {
-	m_timeStarted.setTimeSpec(Qt::UTC);
-	m_timeFinished.setTimeSpec(Qt::UTC);
+	m_timeStarted.setTimeZone(QTimeZone::utc());
+	m_timeFinished.setTimeZone(QTimeZone::utc());
 }
 
 Transfer::~Transfer()
@@ -122,9 +121,9 @@ void Transfer::timerEvent(QTimerEvent *event)
 		{
 			qint64 speedSum(0);
 
-			for (int i = 0; i < m_speeds.count(); ++i)
+			for (quint64 speed: std::as_const(m_speeds))
 			{
-				speedSum += m_speeds.at(i);
+				speedSum += speed;
 			}
 
 			speedSum /= m_speeds.count();
@@ -462,7 +461,7 @@ void Transfer::handleDownloadFinished()
 
 		if (!url.isValid() || (m_source.scheme() == QLatin1String("https") && url.scheme() == QLatin1String("http")))
 		{
-			handleDownloadError(QNetworkReply::UnknownContentError);
+			handleDownloadError(QNetworkReply::InsecureRedirectError);
 		}
 		else
 		{
@@ -678,9 +677,7 @@ QString Transfer::getTarget() const
 
 QIcon Transfer::getIcon() const
 {
-	const QString iconName(getMimeType().iconName());
-
-	return QIcon::fromTheme(iconName, QFileIconProvider().icon(iconName));
+	return ThemesManager::getFileTypeIcon(getMimeType());
 }
 
 QDateTime Transfer::getTimeStarted() const
@@ -876,7 +873,7 @@ bool Transfer::setTarget(const QString &target, bool canOverwriteExisting)
 
 	if (!canOverwriteExisting && !m_options.testFlag(CanOverwriteOption) && QFile::exists(target))
 	{
-		const int result(QMessageBox::question(Application::getActiveWindow(), tr("Question"), tr("File with the same name already exists.\nDo you want to overwrite it?\n\n%1").arg(target), QMessageBox::Yes, QMessageBox::No, QMessageBox::Cancel));
+		const int result(QMessageBox::question(nullptr, tr("Question"), tr("File with the same name already exists.\nDo you want to overwrite it?\n\n%1").arg(target), (QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel), QMessageBox::No));
 
 		if (result == QMessageBox::No)
 		{
@@ -1014,9 +1011,9 @@ void TransfersManager::updateRunningTransfersState()
 {
 	bool hasRunningTransfers(false);
 
-	for (int i = 0; i < m_transfers.count(); ++i)
+	for (Transfer *transfer: std::as_const(m_transfers))
 	{
-		if (m_transfers.at(i)->getState() == Transfer::RunningState)
+		if (transfer->getState() == Transfer::RunningState)
 		{
 			hasRunningTransfers = true;
 
@@ -1040,10 +1037,65 @@ void TransfersManager::addTransfer(Transfer *transfer)
 
 	transfer->setUpdateInterval(500);
 
-	connect(transfer, &Transfer::started, m_instance, &TransfersManager::handleTransferStarted);
-	connect(transfer, &Transfer::finished, m_instance, &TransfersManager::handleTransferFinished);
-	connect(transfer, &Transfer::changed, m_instance, &TransfersManager::handleTransferChanged);
-	connect(transfer, &Transfer::stopped, m_instance, &TransfersManager::handleTransferStopped);
+	connect(transfer, &Transfer::started, m_instance, [=]()
+	{
+		if (transfer->getState() != Transfer::CancelledState)
+		{
+			if (transfer->getState() == Transfer::RunningState)
+			{
+				m_hasRunningTransfers = true;
+			}
+
+			emit m_instance->transferStarted(transfer);
+			emit m_instance->transfersChanged();
+
+			m_instance->scheduleSave();
+		}
+	});
+	connect(transfer, &Transfer::finished, m_instance, [=]()
+	{
+		m_instance->updateRunningTransfersState();
+
+		if (transfer->getState() == Transfer::FinishedState)
+		{
+			Notification::Message message;
+			message.message = QFileInfo(transfer->getTarget()).fileName();
+			message.icon = transfer->getIcon();
+			message.event = NotificationsManager::TransferCompletedEvent;
+
+			if (message.icon.isNull())
+			{
+				message.icon = ThemesManager::createIcon(QLatin1String("download"));
+			}
+
+			connect(NotificationsManager::createNotification(message, m_instance), &Notification::clicked, transfer, &Transfer::openTarget);
+		}
+
+		emit m_instance->transferFinished(transfer);
+		emit m_instance->transfersChanged();
+
+		if (!m_privateTransfers.contains(transfer))
+		{
+			m_instance->scheduleSave();
+		}
+	});
+	connect(transfer, &Transfer::changed, m_instance, [=]()
+	{
+		m_instance->scheduleSave();
+		m_instance->updateRunningTransfersState();
+
+		emit m_instance->transferChanged(transfer);
+		emit m_instance->transfersChanged();
+	});
+	connect(transfer, &Transfer::stopped, m_instance, [=]()
+	{
+		m_instance->updateRunningTransfersState();
+
+		emit m_instance->transferStopped(transfer);
+		emit m_instance->transfersChanged();
+
+		m_instance->scheduleSave();
+	});
 
 	if (options.testFlag(Transfer::CanNotifyOption) && transfer->getState() != Transfer::CancelledState)
 	{
@@ -1085,10 +1137,8 @@ void TransfersManager::save()
 	const int limit(SettingsManager::getOption(SettingsManager::History_DownloadsLimitPeriodOption).toInt());
 	int entry(1);
 
-	for (int i = 0; i < m_transfers.count(); ++i)
+	for (Transfer *transfer: std::as_const(m_transfers))
 	{
-		Transfer *transfer(m_transfers.at(i));
-
 		if (m_privateTransfers.contains(transfer) || (transfer->getState() == Transfer::FinishedState && transfer->getTimeFinished().isValid() && transfer->getTimeFinished().daysTo(QDateTime::currentDateTimeUtc()) > limit))
 		{
 			continue;
@@ -1120,88 +1170,6 @@ void TransfersManager::clearTransfers(int period)
 	}
 }
 
-void TransfersManager::handleTransferStarted()
-{
-	Transfer *transfer(qobject_cast<Transfer*>(sender()));
-
-	if (transfer && transfer->getState() != Transfer::CancelledState)
-	{
-		if (transfer->getState() == Transfer::RunningState)
-		{
-			m_hasRunningTransfers = true;
-		}
-
-		emit transferStarted(transfer);
-		emit transfersChanged();
-
-		scheduleSave();
-	}
-}
-
-void TransfersManager::handleTransferFinished()
-{
-	Transfer *transfer(qobject_cast<Transfer*>(sender()));
-
-	updateRunningTransfersState();
-
-	if (!transfer)
-	{
-		return;
-	}
-
-	if (transfer->getState() == Transfer::FinishedState)
-	{
-		Notification::Message message;
-		message.message = QFileInfo(transfer->getTarget()).fileName();
-		message.icon = transfer->getIcon();
-		message.event = NotificationsManager::TransferCompletedEvent;
-
-		if (message.icon.isNull())
-		{
-			message.icon = ThemesManager::createIcon(QLatin1String("download"));
-		}
-
-		connect(NotificationsManager::createNotification(message, this), &Notification::clicked, transfer, &Transfer::openTarget);
-	}
-
-	emit transferFinished(transfer);
-	emit transfersChanged();
-
-	if (!m_privateTransfers.contains(transfer))
-	{
-		scheduleSave();
-	}
-}
-
-void TransfersManager::handleTransferChanged()
-{
-	Transfer *transfer(qobject_cast<Transfer*>(sender()));
-
-	if (transfer)
-	{
-		scheduleSave();
-		updateRunningTransfersState();
-
-		emit transferChanged(transfer);
-		emit transfersChanged();
-	}
-}
-
-void TransfersManager::handleTransferStopped()
-{
-	Transfer *transfer(qobject_cast<Transfer*>(sender()));
-
-	updateRunningTransfersState();
-
-	if (transfer)
-	{
-		emit transferStopped(transfer);
-		emit transfersChanged();
-
-		scheduleSave();
-	}
-}
-
 TransfersManager* TransfersManager::getInstance()
 {
 	return m_instance;
@@ -1211,7 +1179,10 @@ Transfer* TransfersManager::startTransfer(const QUrl &source, const QString &tar
 {
 	QNetworkRequest request;
 	request.setAttribute(QNetworkRequest::CacheLoadControlAttribute, QNetworkRequest::AlwaysNetwork);
+#if QT_VERSION < 0x060000
 	request.setAttribute(QNetworkRequest::FollowRedirectsAttribute, true);
+#endif
+	request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
 	request.setHeader(QNetworkRequest::UserAgentHeader, NetworkManagerFactory::getUserAgent());
 	request.setUrl(QUrl(source));
 
@@ -1273,9 +1244,9 @@ QVector<Transfer*> TransfersManager::getTransfers()
 
 		m_transfers.reserve(entries.count());
 
-		for (int i = 0; i < entries.count(); ++i)
+		for (const QString &entry: entries)
 		{
-			history.beginGroup(entries.at(i));
+			history.beginGroup(entry);
 
 			if (!history.value(QLatin1String("source")).toString().isEmpty() && !history.value(QLatin1String("target")).toString().isEmpty())
 			{
@@ -1302,10 +1273,8 @@ TransfersManager::ActiveTransfersInformation TransfersManager::getActiveTransfer
 		return information;
 	}
 
-	for (int i = 0; i < m_transfers.count(); ++i)
+	for (Transfer *transfer: std::as_const(m_transfers))
 	{
-		const Transfer *transfer(m_transfers.at(i));
-
 		if (transfer->getState() != Transfer::RunningState)
 		{
 			continue;
@@ -1331,9 +1300,9 @@ int TransfersManager::getRunningTransfersCount()
 {
 	int runningTransfers(0);
 
-	for (int i = 0; i < m_transfers.count(); ++i)
+	for (Transfer *transfer: std::as_const(m_transfers))
 	{
-		if (m_transfers.at(i)->getState() == Transfer::RunningState)
+		if (transfer->getState() == Transfer::RunningState)
 		{
 			++runningTransfers;
 		}
@@ -1378,10 +1347,8 @@ bool TransfersManager::isDownloading(const QString &source, const QString &targe
 		return false;
 	}
 
-	for (int i = 0; i < m_transfers.count(); ++i)
+	for (Transfer *transfer: std::as_const(m_transfers))
 	{
-		Transfer *transfer(m_transfers.at(i));
-
 		if (transfer->getState() != Transfer::RunningState)
 		{
 			continue;

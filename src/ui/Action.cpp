@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -30,18 +30,21 @@ namespace Otter
 
 Action::Action(const QString &text, bool isTranslateable, QObject *parent) : QAction(parent),
 	m_textOverride(text),
-	m_flags(HasCustomTextFlag),
-	m_identifier(-1),
-	m_isTextOverrideTranslateable(isTranslateable)
+	m_flags(HasTextOverrideFlag),
+	m_identifier(-1)
 {
+	if (isTranslateable)
+	{
+		m_flags |= IsTextOverrideTranslateableFlag;
+	}
+
 	initialize();
 }
 
 Action::Action(int identifier, const QVariantMap &parameters, QObject *parent) : QAction(parent),
 	m_parameters(parameters),
 	m_flags(NoFlags),
-	m_identifier(identifier),
-	m_isTextOverrideTranslateable(true)
+	m_identifier(identifier)
 {
 	initialize();
 }
@@ -49,8 +52,7 @@ Action::Action(int identifier, const QVariantMap &parameters, QObject *parent) :
 Action::Action(int identifier, const QVariantMap &parameters, const ActionExecutor::Object &executor, QObject *parent) : QAction(parent),
 	m_parameters(parameters),
 	m_flags(NoFlags),
-	m_identifier(identifier),
-	m_isTextOverrideTranslateable(true)
+	m_identifier(identifier)
 {
 	initialize();
 	setExecutor(executor);
@@ -119,27 +121,29 @@ void Action::handleCategorizedActionsStateChanged(const QVector<int> &categories
 
 void Action::updateIcon()
 {
-	if (m_flags.testFlag(HasCustomIconFlag))
+	if (hasIconOverride())
 	{
 		return;
 	}
 
+	const bool isLeftToRight(QGuiApplication::isLeftToRight());
+
 	switch (m_identifier)
 	{
 		case ActionsManager::GoBackAction:
-			setIcon(ThemesManager::createIcon(QGuiApplication::isLeftToRight() ? QLatin1String("go-previous") : QLatin1String("go-next")));
+			setIcon(ThemesManager::createIcon(isLeftToRight ? QLatin1String("go-previous") : QLatin1String("go-next")));
 
 			break;
 		case ActionsManager::GoForwardAction:
-			setIcon(ThemesManager::createIcon(QGuiApplication::isLeftToRight() ? QLatin1String("go-next") : QLatin1String("go-previous")));
+			setIcon(ThemesManager::createIcon(isLeftToRight ? QLatin1String("go-next") : QLatin1String("go-previous")));
 
 			break;
 		case ActionsManager::RewindAction:
-			setIcon(ThemesManager::createIcon(QGuiApplication::isLeftToRight() ? QLatin1String("go-first") : QLatin1String("go-last")));
+			setIcon(ThemesManager::createIcon(isLeftToRight ? QLatin1String("go-first") : QLatin1String("go-last")));
 
 			break;
 		case ActionsManager::FastForwardAction:
-			setIcon(ThemesManager::createIcon(QGuiApplication::isLeftToRight() ? QLatin1String("go-last") : QLatin1String("go-first")));
+			setIcon(ThemesManager::createIcon(isLeftToRight ? QLatin1String("go-last") : QLatin1String("go-first")));
 
 			break;
 		default:
@@ -167,9 +171,9 @@ void Action::updateState()
 		state.isEnabled = false;
 	}
 
-	if (m_flags.testFlag(HasCustomTextFlag))
+	if (hasTextOverride())
 	{
-		if (m_isTextOverrideTranslateable)
+		if (isTextOverrideTranslateable())
 		{
 			state.text = QCoreApplication::translate("actions", m_textOverride.toUtf8().constData());
 		}
@@ -179,7 +183,7 @@ void Action::updateState()
 		}
 	}
 
-	if (definition.isValid() && definition.flags.testFlag(ActionsManager::ActionDefinition::RequiresParameters) && m_parameters.isEmpty())
+	if (definition.flags.testFlag(ActionsManager::ActionDefinition::RequiresParameters) && m_parameters.isEmpty())
 	{
 		state.isEnabled = false;
 	}
@@ -191,9 +195,9 @@ void Action::updateState()
 void Action::setExecutor(ActionExecutor::Object executor)
 {
 	const ActionsManager::ActionDefinition definition(getDefinition());
-	const QMetaMethod updateStateMethod(metaObject()->method(metaObject()->indexOfMethod("updateState()")));
-	const QMetaMethod handleArbitraryActionsStateChangedMethod(metaObject()->method(metaObject()->indexOfMethod("handleArbitraryActionsStateChanged(QVector<int>)")));
-	const QMetaMethod handleCategorizedActionsStateChangeddMethod(metaObject()->method(metaObject()->indexOfMethod("handleCategorizedActionsStateChanged(QVector<int>)")));
+	const QMetaMethod updateStateMethod(getMethod("updateState()"));
+	const QMetaMethod handleArbitraryActionsStateChangedMethod(getMethod("handleArbitraryActionsStateChanged(QVector<int>)"));
+	const QMetaMethod handleCategorizedActionsStateChangeddMethod(getMethod("handleCategorizedActionsStateChanged(QVector<int>)"));
 	const bool isExecutorValid(executor.isValid());
 
 	if (m_executor.isValid())
@@ -203,12 +207,14 @@ void Action::setExecutor(ActionExecutor::Object executor)
 
 	if (isExecutorValid)
 	{
+		QObject *object(executor.getObject());
+
 		switch (definition.scope)
 		{
 			case ActionsManager::ActionDefinition::MainWindowScope:
-				if (!executor.getObject()->inherits("Otter::Application") && !executor.getObject()->inherits("Otter::MainWindow"))
+				if (!object->inherits("Otter::Application") && !object->inherits("Otter::MainWindow"))
 				{
-					MainWindow *mainWindow(MainWindow::findMainWindow(executor.getObject()));
+					MainWindow *mainWindow(MainWindow::findMainWindow(object));
 
 					if (mainWindow)
 					{
@@ -222,7 +228,7 @@ void Action::setExecutor(ActionExecutor::Object executor)
 
 				break;
 			case ActionsManager::ActionDefinition::ApplicationScope:
-				if (!executor.getObject()->inherits("Otter::Application"))
+				if (!object->inherits("Otter::Application"))
 				{
 					executor = ActionExecutor::Object(Application::getInstance(), Application::getInstance());
 				}
@@ -243,16 +249,6 @@ void Action::setExecutor(ActionExecutor::Object executor)
 	}
 }
 
-void Action::setTextOverride(const QString &text, bool isTranslateable)
-{
-	m_textOverride = text;
-	m_isTextOverrideTranslateable = isTranslateable;
-
-	m_flags |= HasCustomTextFlag;
-
-	updateState();
-}
-
 void Action::setIconOverride(const QString &icon)
 {
 	setIconOverride(ThemesManager::createIcon(icon));
@@ -260,9 +256,18 @@ void Action::setIconOverride(const QString &icon)
 
 void Action::setIconOverride(const QIcon &icon)
 {
-	m_flags |= HasCustomIconFlag;
+	m_flags |= HasIconOverrideFlag;
 
 	setIcon(icon);
+}
+
+void Action::setTextOverride(const QString &text, bool isTranslateable)
+{
+	m_textOverride = text;
+	m_flags |= HasTextOverrideFlag;
+	m_flags.setFlag(IsTextOverrideTranslateableFlag, isTranslateable);
+
+	updateState();
 }
 
 void Action::setState(const ActionsManager::ActionDefinition::State &state)
@@ -273,7 +278,7 @@ void Action::setState(const ActionsManager::ActionDefinition::State &state)
 	setEnabled(state.isEnabled);
 	setChecked(state.isChecked);
 
-	if (!m_flags.testFlag(HasCustomIconFlag))
+	if (!hasIconOverride())
 	{
 		setIcon(state.icon);
 		updateIcon();
@@ -283,6 +288,11 @@ void Action::setState(const ActionsManager::ActionDefinition::State &state)
 QString Action::getTextOverride() const
 {
 	return m_textOverride;
+}
+
+QMetaMethod Action::getMethod(const char *method) const
+{
+	return metaObject()->method(metaObject()->indexOfMethod(method));
 }
 
 ActionsManager::ActionDefinition Action::getDefinition() const
@@ -300,14 +310,19 @@ int Action::getIdentifier() const
 	return m_identifier;
 }
 
+bool Action::hasIconOverride() const
+{
+	return m_flags.testFlag(HasIconOverrideFlag);
+}
+
 bool Action::hasTextOverride() const
 {
-	return m_flags.testFlag(HasCustomTextFlag);
+	return m_flags.testFlag(HasTextOverrideFlag);
 }
 
 bool Action::isTextOverrideTranslateable() const
 {
-	return m_isTextOverrideTranslateable;
+	return m_flags.testFlag(IsTextOverrideTranslateableFlag);
 }
 
 bool Action::event(QEvent *event)

@@ -1,7 +1,7 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
 * Copyright (C) 2014 - 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
-* Copyright (C) 2015 - 2024 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -23,13 +23,13 @@
 #include "Application.h"
 #include "Console.h"
 #include "JsonSettings.h"
-#include "SettingsManager.h"
 #include "SessionsManager.h"
 
 #include <QtCore/QDir>
 #include <QtCore/QJsonArray>
 #include <QtCore/QJsonObject>
 #include <QtCore/QTimer>
+#include <QtCore/QTimeZone>
 
 namespace Otter
 {
@@ -63,13 +63,13 @@ void ContentFiltersManager::initialize()
 	}
 
 	const QList<QFileInfo> existingProfiles(QDir(SessionsManager::getWritableDataPath(QLatin1String("contentBlocking"))).entryInfoList({QLatin1String("*.txt")}, QDir::Files));
-	QJsonObject bundledMainObject(JsonSettings(SessionsManager::getReadableDataPath(QLatin1String("contentBlocking.json"), true)).object());
+	const QJsonObject bundledMainObject(JsonSettings(SessionsManager::getReadableDataPath(QLatin1String("contentBlocking.json"), true)).object());
 	QStringList profiles;
 	profiles.reserve(existingProfiles.count());
 
-	for (int i = 0; i < existingProfiles.count(); ++i)
+	for (const QFileInfo &information: existingProfiles)
 	{
-		const QString name(existingProfiles.at(i).completeBaseName());
+		const QString name(information.completeBaseName());
 
 		if (!profiles.contains(name))
 		{
@@ -93,15 +93,15 @@ void ContentFiltersManager::initialize()
 
 	m_contentBlockingProfiles.reserve(profiles.count());
 
-	QJsonObject localMainObject(JsonSettings(SessionsManager::getWritableDataPath(QLatin1String("contentBlocking.json"))).object());
+	const QJsonObject localMainObject(JsonSettings(SessionsManager::getWritableDataPath(QLatin1String("contentBlocking.json"))).object());
 	const QHash<QString, ContentFiltersProfile::ProfileCategory> categoryTitles({{QLatin1String("advertisements"), ContentFiltersProfile::AdvertisementsCategory}, {QLatin1String("annoyance"), ContentFiltersProfile::AnnoyanceCategory}, {QLatin1String("privacy"), ContentFiltersProfile::PrivacyCategory}, {QLatin1String("social"), ContentFiltersProfile::SocialCategory}, {QLatin1String("regional"), ContentFiltersProfile::RegionalCategory}, {QLatin1String("other"), ContentFiltersProfile::OtherCategory}});
 
-	for (int i = 0; i < profiles.count(); ++i)
+	for (const QString &name: profiles)
 	{
-		QJsonObject profileObject(localMainObject.value(profiles.at(i)).toObject());
-		const QJsonObject bundledProfileObject(bundledMainObject.value(profiles.at(i)).toObject());
+		QJsonObject profileObject(localMainObject.value(name).toObject());
+		const QJsonObject bundledProfileObject(bundledMainObject.value(name).toObject());
 		ContentFiltersProfile::ProfileSummary profileSummary;
-		profileSummary.name = profiles.at(i);
+		profileSummary.name = name;
 
 		ContentFiltersProfile::ProfileFlags flags(ContentFiltersProfile::NoFlags);
 
@@ -152,7 +152,7 @@ void ContentFiltersManager::initialize()
 		}
 
 		profileSummary.lastUpdate = QDateTime::fromString(profileObject.value(QLatin1String("lastUpdate")).toString(), Qt::ISODate);
-		profileSummary.lastUpdate.setTimeSpec(Qt::UTC);
+		profileSummary.lastUpdate.setTimeZone(QTimeZone::utc());
 		profileSummary.category = categoryTitles.value(profileObject.value(QLatin1String("category")).toString());
 		profileSummary.updateInterval = profileObject.value(QLatin1String("updateInterval")).toInt();
 		profileSummary.areWildcardsEnabled = profileObject.value(QLatin1String("areWildcardsEnabled")).toBool();
@@ -161,9 +161,9 @@ void ContentFiltersManager::initialize()
 		QStringList languages;
 		languages.reserve(languagesArray.count());
 
-		for (int j = 0; j < languagesArray.count(); ++j)
+		for (const QJsonValue &languageValue: languagesArray)
 		{
-			languages.append(languagesArray.at(j).toString());
+			languages.append(languageValue.toString());
 		}
 
 		ContentFiltersProfile *profile(new AdblockContentFiltersProfile(profileSummary, languages, flags, m_instance));
@@ -234,10 +234,8 @@ void ContentFiltersManager::save()
 		}
 	}
 
-	for (int i = 0; i < m_contentBlockingProfiles.count(); ++i)
+	for (ContentFiltersProfile *profile: std::as_const(m_contentBlockingProfiles))
 	{
-		const ContentFiltersProfile *profile(m_contentBlockingProfiles.at(i));
-
 		if (!profile)
 		{
 			continue;
@@ -268,15 +266,15 @@ void ContentFiltersManager::save()
 		profileObject.insert(QLatin1String("cosmeticFiltersMode"), cosmeticFiltersModes.value(profile->getCosmeticFiltersMode()));
 		profileObject.insert(QLatin1String("areWildcardsEnabled"), profile->areWildcardsEnabled());
 
-		const QVector<QLocale::Language> languages(m_contentBlockingProfiles.at(i)->getLanguages());
+		const QVector<QLocale::Language> languages(profile->getLanguages());
 
 		if (!languages.contains(QLocale::AnyLanguage))
 		{
 			QJsonArray languagesArray;
 
-			for (int j = 0; j < languages.count(); ++j)
+			for (QLocale::Language language: languages)
 			{
-				languagesArray.append(QLocale(languages.at(j)).name());
+				languagesArray.append(QLocale(language).name());
 			}
 
 			profileObject.insert(QLatin1String("languages"), languagesArray);
@@ -300,11 +298,14 @@ void ContentFiltersManager::addProfile(ContentFiltersProfile *profile)
 
 	for (int i = 0; i < m_contentBlockingProfiles.count(); ++i)
 	{
-		if (m_contentBlockingProfiles.at(i)->getName() == profile->getName())
+		ContentFiltersProfile *currentProfile(m_contentBlockingProfiles.at(i));
+
+		if (currentProfile->getName() == profile->getName())
 		{
 			isReplacing = true;
 
-			m_contentBlockingProfiles.at(i)->deleteLater();
+			currentProfile->deleteLater();
+
 			m_contentBlockingProfiles.replace(i, profile);
 
 			break;
@@ -366,10 +367,8 @@ ContentFiltersManager* ContentFiltersManager::getInstance()
 
 ContentFiltersProfile* ContentFiltersManager::getProfile(const QString &name)
 {
-	for (int i = 0; i < m_contentBlockingProfiles.count(); ++i)
+	for (ContentFiltersProfile *profile: std::as_const(m_contentBlockingProfiles))
 	{
-		ContentFiltersProfile *profile(m_contentBlockingProfiles.at(i));
-
 		if (profile->getName() == name)
 		{
 			return profile;
@@ -386,10 +385,8 @@ ContentFiltersProfile* ContentFiltersManager::getProfile(const QUrl &url)
 		return nullptr;
 	}
 
-	for (int i = 0; i < m_contentBlockingProfiles.count(); ++i)
+	for (ContentFiltersProfile *profile: std::as_const(m_contentBlockingProfiles))
 	{
-		ContentFiltersProfile *profile(m_contentBlockingProfiles.at(i));
-
 		if (profile->getUpdateUrl() == url)
 		{
 			return profile;
@@ -421,17 +418,15 @@ ContentFiltersManager::CheckResult ContentFiltersManager::checkUrl(const QVector
 	CheckResult result;
 	result.isFraud = ((resourceType == NetworkManager::MainFrameType || resourceType == NetworkManager::SubFrameType) ? isFraud(requestUrl) : false);
 
-	for (int i = 0; i < profiles.count(); ++i)
+	for (int index: profiles)
 	{
-		const int profile(profiles.at(i));
-
-		if (profile < 0 || profile >= m_contentBlockingProfiles.count())
+		if (index < 0 || index >= m_contentBlockingProfiles.count())
 		{
 			continue;
 		}
 
-		CheckResult currentResult(m_contentBlockingProfiles.at(profile)->checkUrl(baseUrl, requestUrl, resourceType));
-		currentResult.profile = profile;
+		CheckResult currentResult(m_contentBlockingProfiles.at(index)->checkUrl(baseUrl, requestUrl, resourceType));
+		currentResult.profile = index;
 		currentResult.isFraud = result.isFraud;
 
 		if (currentResult.isBlocked)
@@ -462,15 +457,14 @@ ContentFiltersManager::CosmeticFiltersResult ContentFiltersManager::getCosmeticF
 	}
 
 	CosmeticFiltersResult result;
-	const QStringList domains(createSubdomainList(requestUrl.host()));
+	const QStringList domains(Utils::createSubdomainList(requestUrl.host()));
+	const bool isDomainOnly(mode == DomainOnlyFilters);
 
-	for (int i = 0; i < profiles.count(); ++i)
+	for (int index: profiles)
 	{
-		const int index(profiles.at(i));
-
 		if (index >= 0 && index < m_contentBlockingProfiles.count())
 		{
-			const CosmeticFiltersResult profileResult(m_contentBlockingProfiles.at(index)->getCosmeticFilters(domains, (mode == DomainOnlyFilters)));
+			const CosmeticFiltersResult profileResult(m_contentBlockingProfiles.at(index)->getCosmeticFilters(domains, isDomainOnly));
 
 			result.rules.append(profileResult.rules);
 			result.exceptions.append(profileResult.exceptions);
@@ -480,24 +474,6 @@ ContentFiltersManager::CosmeticFiltersResult ContentFiltersManager::getCosmeticF
 	return result;
 }
 
-QStringList ContentFiltersManager::createSubdomainList(const QString &domain)
-{
-	QStringList subdomainList;
-	int dotPosition(domain.lastIndexOf(QLatin1Char('.')));
-	dotPosition = domain.lastIndexOf(QLatin1Char('.'), (dotPosition - 1));
-
-	while (dotPosition != -1)
-	{
-		subdomainList.append(domain.mid(dotPosition + 1));
-
-		dotPosition = domain.lastIndexOf(QLatin1Char('.'), (dotPosition - 1));
-	}
-
-	subdomainList.append(domain);
-
-	return subdomainList;
-}
-
 QStringList ContentFiltersManager::getProfileNames()
 {
 	initialize();
@@ -505,9 +481,9 @@ QStringList ContentFiltersManager::getProfileNames()
 	QStringList names;
 	names.reserve(m_contentBlockingProfiles.count());
 
-	for (int i = 0; i < m_contentBlockingProfiles.count(); ++i)
+	for (ContentFiltersProfile *profile: std::as_const(m_contentBlockingProfiles))
 	{
-		names.append(m_contentBlockingProfiles.at(i)->getName());
+		names.append(profile->getName());
 	}
 
 	return names;
@@ -536,15 +512,18 @@ QVector<int> ContentFiltersManager::getProfileIdentifiers(const QStringList &nam
 
 	initialize();
 
+	int index(0);
 	QVector<int> identifiers;
 	identifiers.reserve(names.count());
 
-	for (int i = 0; i < m_contentBlockingProfiles.count(); ++i)
+	for (ContentFiltersProfile *profile: std::as_const(m_contentBlockingProfiles))
 	{
-		if (names.contains(m_contentBlockingProfiles.at(i)->getName()))
+		if (names.contains(profile->getName()))
 		{
-			identifiers.append(i);
+			identifiers.append(index);
 		}
+
+		++index;
 	}
 
 	return identifiers;
@@ -552,9 +531,9 @@ QVector<int> ContentFiltersManager::getProfileIdentifiers(const QStringList &nam
 
 bool ContentFiltersManager::isFraud(const QUrl &url)
 {
-	for (int i = 0; i < m_fraudCheckingProfiles.count(); ++i)
+	for (ContentFiltersProfile *profile: std::as_const(m_fraudCheckingProfiles))
 	{
-		if (m_fraudCheckingProfiles.at(i)->isFraud(url))
+		if (profile->isFraud(url))
 		{
 			return true;
 		}
@@ -565,6 +544,13 @@ bool ContentFiltersManager::isFraud(const QUrl &url)
 
 ContentFiltersProfile::ContentFiltersProfile(QObject *parent) : QObject(parent)
 {
+}
+
+bool ContentFiltersProfile::isFraud(const QUrl &url)
+{
+	Q_UNUSED(url)
+
+	return false;
 }
 
 }

@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2023 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2026 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 Piotr Wójcik <chocimier@tlen.pl>
 * Copyright (C) 2015 - 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
@@ -71,14 +71,14 @@ QtWebKitNetworkManager::QtWebKitNetworkManager(bool isPrivate, QtWebKitCookieJar
 
 	if (isPrivate)
 	{
-		m_cookieJar = new CookieJar({}, this);
+		m_cookieJar = new DiskCookieJar({}, this);
 	}
 	else
 	{
 		m_cookieJar = NetworkManagerFactory::getCookieJar();
 		m_cookieJar->setParent(QCoreApplication::instance());
 
-		QNetworkDiskCache *cache(NetworkManagerFactory::getCache());
+		NetworkCache *cache(NetworkManagerFactory::getCache());
 
 		setCache(cache);
 
@@ -157,7 +157,9 @@ void QtWebKitNetworkManager::resetStatistics()
 
 	for (int i = 0; i < keys.count(); ++i)
 	{
-		emit pageInformationChanged(keys.at(i), m_pageInformation.value(keys.at(i)));
+		const WebWidget::PageInformation key(keys.at(i));
+
+		emit pageInformationChanged(key, m_pageInformation.value(key));
 	}
 
 	emit contentStateChanged(m_contentState);
@@ -171,7 +173,24 @@ void QtWebKitNetworkManager::registerTransfer(QNetworkReply *reply)
 
 		setParent(nullptr);
 
-		connect(reply, &QNetworkReply::finished, this, &QtWebKitNetworkManager::handleTransferFinished);
+		connect(reply, &QNetworkReply::finished, reply, [=]()
+		{
+			m_transfers.removeAll(reply);
+
+			reply->deleteLater();
+
+			if (m_transfers.isEmpty())
+			{
+				if (m_widget)
+				{
+					setParent(m_widget);
+				}
+				else
+				{
+					deleteLater();
+				}
+			}
+		});
 	}
 }
 
@@ -246,15 +265,19 @@ void QtWebKitNetworkManager::handleRequestFinished(QNetworkReply *reply)
 		}
 		else
 		{
-			m_sslInformation.certificates = reply->sslConfiguration().peerCertificateChain().toVector();
-			m_sslInformation.cipher = reply->sslConfiguration().sessionCipher();
+			const QSslConfiguration sslConfiguration(reply->sslConfiguration());
+
+			m_sslInformation.certificates = sslConfiguration.peerCertificateChain().toVector();
+			m_sslInformation.cipher = sslConfiguration.sessionCipher();
 		}
 
 		const QList<QNetworkReply::RawHeaderPair> rawHeaders(m_baseReply->rawHeaderPairs());
 
 		for (int i = 0; i < rawHeaders.count(); ++i)
 		{
-			m_headers[rawHeaders.at(i).first] = rawHeaders.at(i).second;
+			const QNetworkReply::RawHeaderPair rawHeader(rawHeaders.at(i));
+
+			m_headers[rawHeader.first] = rawHeader.second;
 		}
 
 		const QVariant mimeTypeHeader(reply->header(QNetworkRequest::ContentTypeHeader));
@@ -276,32 +299,6 @@ void QtWebKitNetworkManager::handleRequestFinished(QNetworkReply *reply)
 	}
 
 	disconnect(reply, &QNetworkReply::downloadProgress, this, &QtWebKitNetworkManager::handleDownloadProgress);
-}
-
-void QtWebKitNetworkManager::handleTransferFinished()
-{
-	QNetworkReply *reply(qobject_cast<QNetworkReply*>(sender()));
-
-	if (!reply)
-	{
-		return;
-	}
-
-	m_transfers.removeAll(reply);
-
-	reply->deleteLater();
-
-	if (m_transfers.isEmpty())
-	{
-		if (m_widget)
-		{
-			setParent(m_widget);
-		}
-		else
-		{
-			deleteLater();
-		}
-	}
 }
 
 void QtWebKitNetworkManager::handleAuthenticationRequired(QNetworkReply *reply, QAuthenticator *authenticator)
@@ -629,7 +626,7 @@ QNetworkReply* QtWebKitNetworkManager::createRequest(Operation operation, const 
 			else if (action == QLatin1String("save-password"))
 			{
 				const QJsonArray fieldsArray(payloadObject.value(QLatin1String("fields")).toArray());
-				PasswordsManager::PasswordInformation password;
+				PasswordsManager::Password password;
 				password.url = QUrl(payloadObject.value(QLatin1String("url")).toString());
 				password.timeAdded = QDateTime::currentDateTimeUtc();
 				password.fields.reserve(fieldsArray.count());
@@ -638,7 +635,7 @@ QNetworkReply* QtWebKitNetworkManager::createRequest(Operation operation, const 
 				for (int i = 0; i < fieldsArray.count(); ++i)
 				{
 					const QJsonObject fieldObject(fieldsArray.at(i).toObject());
-					PasswordsManager::PasswordInformation::Field field;
+					PasswordsManager::Password::Field field;
 					field.name = fieldObject.value(QLatin1String("name")).toString();
 					field.value = fieldObject.value(QLatin1String("value")).toString();
 					field.type = ((fieldObject.value(QLatin1String("type")).toString() == QLatin1String("password")) ? PasswordsManager::PasswordField : PasswordsManager::TextField);
@@ -677,7 +674,7 @@ QNetworkReply* QtWebKitNetworkManager::createRequest(Operation operation, const 
 			{
 				const ContentFiltersProfile *profile(ContentFiltersManager::getProfile(result.profile));
 
-				Console::addMessage(QCoreApplication::translate("main", "Request blocked by rule from profile %1:\n%2").arg((profile ? profile->getTitle() : QCoreApplication::translate("main", "(Unknown)")), result.rule), Console::NetworkCategory, Console::LogLevel, request.url().toString(), -1, (m_widget ? m_widget->getWindowIdentifier() : 0));
+				Console::addMessage(QCoreApplication::translate("main", "Request blocked by rule from profile %1:\n%2").arg((profile ? profile->getTitle() : QCoreApplication::translate("main", "(Unknown)")), result.rule), Console::NetworkCategory, Console::LogLevel, request.url().toString(), -1, m_widget->getWindowIdentifier());
 
 				if (resourceType != NetworkManager::ScriptType && resourceType != NetworkManager::StyleSheetType)
 				{
@@ -724,7 +721,7 @@ QNetworkReply* QtWebKitNetworkManager::createRequest(Operation operation, const 
 
 	mutableRequest.setRawHeader(QByteArrayLiteral("Accept-Language"), (m_acceptLanguage.isEmpty() ? NetworkManagerFactory::getAcceptLanguage().toLatin1() : m_acceptLanguage.toLatin1()));
 	mutableRequest.setHeader(QNetworkRequest::UserAgentHeader, m_userAgent);
-	mutableRequest.setAttribute(QNetworkRequest::HTTP2AllowedAttribute, false);
+	mutableRequest.setAttribute(QNetworkRequest::Http2AllowedAttribute, false);
 
 	setPageInformation(WebWidget::LoadingMessageInformation, tr("Sending request to %1…").arg(request.url().host()));
 

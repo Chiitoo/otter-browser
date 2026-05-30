@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2016 - 2020 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2016 - 2025 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -22,7 +22,15 @@
 
 #include "../../../../core/TransfersManager.h"
 
+#if QT_VERSION >= 0x060000
+#include <QtWebEngineCore/QWebEngineDownloadRequest>
+#define QWebEngineDownloadX QWebEngineDownloadRequest
+#define xDlProgress DownloadInProgress
+#else
 #include <QtWebEngineWidgets/QWebEngineDownloadItem>
+#define QWebEngineDownloadX QWebEngineDownloadItem
+#define xDlProgress downloadProgress
+#endif
 
 namespace Otter
 {
@@ -32,7 +40,7 @@ class QtWebEngineTransfer final : public Transfer
 	Q_OBJECT
 
 public:
-	explicit QtWebEngineTransfer(QWebEngineDownloadItem *item, TransferOptions options = CanAskForPathOption, QObject *parent = nullptr);
+	explicit QtWebEngineTransfer(QWebEngineDownloadX *item, TransferOptions options = CanAskForPathOption, QObject *parent = nullptr);
 
 	QUrl getSource() const override;
 	QString getSuggestedFileName() override;
@@ -47,7 +55,11 @@ public slots:
 	bool setTarget(const QString &target, bool canOverwriteExisting = false) override;
 
 private:
+#if QT_VERSION >= 0x060000
+	QPointer<QWebEngineDownloadX> m_item;
+#else
 	QPointer<QWebEngineDownloadItem> m_item;
+#endif
 };
 
 }
